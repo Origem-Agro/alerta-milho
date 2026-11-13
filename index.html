@@ -85,6 +85,26 @@ main{padding-bottom:calc(84px + env(safe-area-inset-bottom))}
 .oc .tx small{display:block;color:var(--sub);font-size:12px;margin-top:2px}
 .oc button{background:none;border:0;color:#7a1212;font-size:12px;text-decoration:underline;padding:2px}
 .filtros{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.gcard{display:flex;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--borda);cursor:pointer}
+.gcard:last-child{border-bottom:0}
+.gcard .th{flex:0 0 64px;height:64px;border-radius:8px;background:#e3e8e5 center/cover no-repeat;display:flex;align-items:center;justify-content:center;font-size:24px}
+.gcard .tx{flex:1}
+.gcard .tx small{display:block;color:var(--sub);font-size:12px;font-style:italic}
+.badge{display:inline-block;font-size:11px;background:#eceff1;color:#4a5350;border-radius:4px;padding:1px 6px;margin-left:4px;font-style:normal}
+.fotos{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;margin:0 -4px 6px;padding:0 4px}
+.fotos figure{flex:0 0 86%;margin:0;scroll-snap-align:start}
+.fotos img{width:100%;height:260px;object-fit:cover;border-radius:10px;background:#e3e8e5;display:block}
+.fotos figcaption{font-size:12px;color:var(--sub);margin-top:4px}
+.semfoto{height:120px;border-radius:10px;background:#f3f6f4;display:flex;align-items:center;justify-content:center;color:var(--sub);font-size:13px;text-align:center;padding:10px}
+.sec h3{font-size:14px;margin:14px 0 6px;color:var(--verde)}
+.sec ul{margin:0;padding-left:18px;font-size:14px;line-height:1.45}
+.sec li{margin-bottom:4px}
+.voltar{background:none;border:0;color:var(--verde);font-size:15px;font-weight:600;padding:0 0 10px}
+.heat{border-collapse:separate;border-spacing:2px;font-size:10px;margin:4px 0}
+.heat td{width:26px;height:18px;border-radius:2px}
+.heat th{font-weight:400;color:var(--sub);padding:0 3px}
+.h0{background:#2e9e4f}.h1{background:#f2e300}.h2{background:#e02424}
+.dzlink{background:none;border:0;padding:0;font:inherit;color:inherit;text-align:left;text-decoration:underline dotted;text-underline-offset:3px;cursor:pointer}
 </style>
 </head>
 <body>
@@ -213,9 +233,14 @@ main{padding-bottom:calc(84px + env(safe-area-inset-bottom))}
     </div>
    </div>
 
+   <div id="abaGuia" class="hidden">
+    <div class="card" id="guiaConteudo"><p class="sub">Carregando…</p></div>
+   </div>
+
    <nav class="abas">
      <button id="tabAlertas" class="ativa" type="button"><span>⚠️</span>Alertas</button>
      <button id="tabOcorr" type="button"><span>📍</span>Ocorrências</button>
+     <button id="tabGuia" type="button"><span>📖</span>Doenças</button>
    </nav>
   </section>
 
@@ -335,7 +360,8 @@ async function entrarNoApp() {
   if ($("loc").value) loadMun(); else render();
   prepararOcorr();
   const abaUrl = new URLSearchParams(location.search).get("aba");
-  mostrarAba(abaUrl === "ocorr" || (!abaUrl && ler("aba") === "ocorr") ? "ocorr" : "alertas");
+  const abaIni = abaUrl || ler("aba");
+  mostrarAba(["ocorr", "guia"].includes(abaIni) ? abaIni : "alertas");
   if (abaUrl) history.replaceState(null, "", location.pathname);
   prepararAvisos();
   carregarOcorr();
@@ -420,7 +446,7 @@ function render() {
     const jan = BASE.win[it.dz];
     const sub = jan ? "janela " + STAGES[jan[0]] + "–" + STAGES[jan[1]] : "todos os estádios";
     if (it.fora) html += '<li><span class="nome">' + esc(it.dz) + '<small>' + sub + '</small></span><span class="tag off">Fora do estádio</span></li>';
-    else html += '<li><span class="nome">' + esc(it.dz) + '<small>' + sub + '</small></span><span class="tag ' + it.x.c + '">' + esc(it.x.a) + '<small>' + esc(it.x.sub) + '</small></span></li>';
+    else html += '<li><span class="nome"><button class="dzlink" data-dz="' + esc(it.dz) + '">' + esc(it.dz) + '</button><small>' + sub + '</small></span><span class="tag ' + it.x.c + '">' + esc(it.x.a) + '<small>' + esc(it.x.sub) + '</small></span></li>';
   });
   html += '</ul></div>';
   const elev = num(w.elevacao_m);
@@ -435,6 +461,7 @@ function render() {
   html += cardOcorrMunicipio(loc, nome);
   out.innerHTML = html;
   const vm = $("verMapa"); if (vm) vm.addEventListener("click", () => mostrarAba("ocorr"));
+  out.querySelectorAll(".dzlink").forEach((bt) => bt.addEventListener("click", () => abrirGuiaPorDoenca(bt.dataset.dz)));
   out.querySelectorAll(".dia").forEach((el) => {
     const go = () => { diaSel = +el.dataset.i; render(); };
     el.addEventListener("click", go);
@@ -451,14 +478,18 @@ const fmtQuando = (s) => new Date(s).toLocaleString("pt-BR", { timeZone: "Americ
 function mostrarAba(a) {
   $("abaAlertas").classList.toggle("hidden", a !== "alertas");
   $("abaOcorr").classList.toggle("hidden", a !== "ocorr");
+  $("abaGuia").classList.toggle("hidden", a !== "guia");
   $("tabAlertas").classList.toggle("ativa", a === "alertas");
   $("tabOcorr").classList.toggle("ativa", a === "ocorr");
+  $("tabGuia").classList.toggle("ativa", a === "guia");
+  if (a === "guia") carregarGuia();
   guardar("aba", a);
   window.scrollTo(0, 0);
   if (a === "ocorr") { if (ocorrPronto) copiarSelecao(); iniciarMapa(); setTimeout(() => { if (mapa) mapa.invalidateSize(); desenharOcorr(); }, 50); }
 }
 $("tabAlertas").addEventListener("click", () => mostrarAba("alertas"));
 $("tabOcorr").addEventListener("click", () => mostrarAba("ocorr"));
+$("tabGuia").addEventListener("click", () => { mostrarAba("guia"); listaGuia(); });
 
 let ocorrPronto = false;
 function fillOHyb() {
@@ -728,6 +759,83 @@ async function desativarAvisos() {
 }
 function atualizarLocalAviso(lat, lon) {
   if (inscricao) sb.rpc("alerta_milho_atualizar_local_push", { p_endpoint: inscricao.endpoint, p_latitude: lat, p_longitude: lon }).then(() => {}, () => {});
+}
+// ---------- Guia de doenças ----------
+let GUIA = null, FOTOS = {}, guiaCarregando = null;
+const HEAT_T = [40, 35, 30, 25, 20, 15, 10], HEAT_UR = [60, 65, 70, 75, 80, 85, 90, 95, 100];
+
+function carregarGuia() {
+  if (GUIA) return Promise.resolve(GUIA);
+  if (guiaCarregando) return guiaCarregando;
+  guiaCarregando = (async () => {
+    const { data, error } = await sb.rpc("alerta_milho_guia");
+    if (error || !data) { $("guiaConteudo").innerHTML = '<div class="msg err">' + esc(error ? traduz(error) : "Sem acesso ao guia.") + '</div>'; guiaCarregando = null; return null; }
+    GUIA = data;
+    const caminhos = GUIA.flatMap((g) => g.imagens.map((i) => i.caminho));
+    if (caminhos.length) {
+      const { data: urls } = await sb.storage.from("alerta-milho-guia").createSignedUrls(caminhos, 6 * 3600);
+      (urls || []).forEach((u) => { if (u.signedUrl && !u.error) FOTOS[u.path] = u.signedUrl; });
+    }
+    if (!$("abaGuia").classList.contains("hidden") && !$("guiaConteudo").dataset.slug) listaGuia();
+    return GUIA;
+  })();
+  return guiaCarregando;
+}
+
+function listaGuia() {
+  $("guiaConteudo").dataset.slug = "";
+  if (!GUIA) { $("guiaConteudo").innerHTML = '<p class="sub">Carregando…</p>'; carregarGuia(); return; }
+  let h = '<h2>Guia de doenças</h2><p class="sub" style="margin:0 0 6px">Fotos, sintomas, condições favoráveis e controle de cada doença.</p>';
+  GUIA.forEach((g) => {
+    const f = g.imagens[0] && FOTOS[g.imagens[0].caminho];
+    h += '<div class="gcard" data-slug="' + esc(g.slug) + '" role="button" tabindex="0"><div class="th"' + (f ? ' style="background-image:url(\'' + f + '\')"' : '') + '>' + (f ? '' : '🌽') + '</div>' +
+      '<div class="tx"><b>' + esc(g.titulo) + '</b>' + (g.monitorada ? '' : '<span class="badge">fora do alerta</span>') + '<small>' + esc(g.agente) + '</small></div></div>';
+  });
+  $("guiaConteudo").innerHTML = h;
+  $("guiaConteudo").querySelectorAll(".gcard").forEach((el) => {
+    el.addEventListener("click", () => abrirGuia(el.dataset.slug));
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter") abrirGuia(el.dataset.slug); });
+  });
+}
+
+function heatmapHtml(m) {
+  let h = '<table class="heat"><tbody>';
+  m.forEach((linha, i) => { h += '<tr><th>' + HEAT_T[i] + '</th>' + linha.map((v) => '<td class="h' + v + '"></td>').join('') + '</tr>'; });
+  h += '<tr><th></th>' + HEAT_UR.map((u) => '<th>' + u + '</th>').join('') + '</tr></tbody></table>';
+  return h + '<p class="sub" style="margin:2px 0 0;font-size:11px">Temperatura (°C) × UR (%). Vermelho: mais favorável; amarelo: intermediário; verde: desfavorável.</p>';
+}
+
+function abrirGuia(slug) {
+  const g = (GUIA || []).find((x) => x.slug === slug);
+  if (!g) return;
+  $("guiaConteudo").dataset.slug = slug;
+  const lista = (titulo, itens) => itens && itens.length ? '<div class="sec"><h3>' + titulo + '</h3><ul>' + itens.map((i) => '<li>' + esc(i) + '</li>').join('') + '</ul></div>' : '';
+  const jan = BASE && BASE.win[g.doenca];
+  let h = '<button class="voltar" type="button">‹ Todas as doenças</button>';
+  h += '<h2 style="margin-bottom:2px">' + esc(g.titulo) + (g.monitorada ? '' : '<span class="badge">fora do alerta</span>') + '</h2><p class="sub" style="margin:0 0 10px"><i>' + esc(g.agente) + '</i></p>';
+  if (g.imagens.length) {
+    h += '<div class="fotos">' + g.imagens.map((i) => FOTOS[i.caminho]
+      ? '<figure><img loading="lazy" src="' + FOTOS[i.caminho] + '" alt="' + esc(i.legenda || g.titulo) + '"><figcaption>' + esc(i.legenda || '') + '</figcaption></figure>'
+      : '<figure><div class="semfoto">Foto ainda não carregada no servidor</div><figcaption>' + esc(i.legenda || '') + '</figcaption></figure>').join('') + '</div>';
+  } else h += '<div class="semfoto">Ainda não há fotos desta doença no material interno.</div>';
+  h += lista('Sintomas', g.sintomas);
+  h += lista('Condições favoráveis', g.condicoes);
+  if (g.heatmap) h += '<div class="sec"><h3>Mapa de favorabilidade</h3>' + heatmapHtml(g.heatmap) + '</div>';
+  if (g.monitorada && g.doenca) h += '<div class="sec"><h3>Fase de suscetibilidade</h3><ul><li>' + (jan ? 'Do estádio ' + STAGES[jan[0]] + ' ao ' + STAGES[jan[1]] + ' (escala Embrapa).' : 'Todos os estádios (não consta na escala Embrapa).') + '</li></ul></div>';
+  h += lista('Sobrevivência e hospedeiros', g.sobrevivencia);
+  h += lista('Controle', g.controle);
+  h += lista('Como diferenciar', g.diferenciar);
+  h += '<p class="sub" style="margin:14px 0 0;font-size:12px">' + esc(g.fonte) + (g.creditos ? ' · ' + esc(g.creditos) : '') + '. Uso interno.</p>';
+  $("guiaConteudo").innerHTML = h;
+  $("guiaConteudo").querySelector(".voltar").addEventListener("click", () => { listaGuia(); window.scrollTo(0, 0); });
+  window.scrollTo(0, 0);
+}
+
+async function abrirGuiaPorDoenca(doenca) {
+  mostrarAba("guia");
+  await carregarGuia();
+  const g = (GUIA || []).find((x) => x.doenca === doenca);
+  if (g) abrirGuia(g.slug); else listaGuia();
 }
 </script>
 </body>
