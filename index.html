@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#1e5e3a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Alerta Milho">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>Alerta de Doenças do Milho</title>
+<style>
+:root{color-scheme:light;--verde:#1e5e3a;--fundo:#eef2ef;--txt:#1b1f1c;--sub:#4a5350;--borda:#d5ddd9}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--fundo);color:var(--txt);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px}
+header{background:var(--verde);color:#fff;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:5}
+header img{width:30px;height:30px;border-radius:7px}
+header h1{font-size:17px;margin:0;flex:1;font-weight:600}
+header button{background:transparent;border:1px solid rgba(255,255,255,.5);color:#fff;border-radius:6px;padding:5px 10px;font-size:13px}
+main{max-width:720px;margin:0 auto;padding:12px 12px calc(24px + env(safe-area-inset-bottom))}
+.card{background:#fff;border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:12px}
+h2{font-size:15px;margin:0 0 10px}
+label{display:block;font-size:12px;color:var(--sub);font-weight:600;margin:10px 0 4px}
+label:first-child{margin-top:0}
+input,select{width:100%;padding:11px 10px;font-size:16px;border:1px solid #b8c2bd;border-radius:8px;background:#fff;color:var(--txt)}
+.btn{width:100%;margin-top:14px;padding:12px;border:0;border-radius:8px;background:var(--verde);color:#fff;font-size:16px;font-weight:600}
+.btn:disabled{opacity:.6}
+.link{background:none;border:0;color:var(--verde);text-decoration:underline;font-size:14px;margin-top:12px;padding:4px 0}
+.sub{color:var(--sub);font-size:13px}
+.msg{padding:10px 12px;border-radius:8px;font-size:14px;margin-top:12px}
+.msg.err{background:#fdecec;color:#7a1212}
+.msg.ok{background:#e7f4ec;color:#1e5e3a}
+.hidden{display:none!important}
+.dias{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;scroll-snap-type:x mandatory}
+.dia{flex:0 0 auto;min-width:84px;border-radius:10px;padding:8px;text-align:center;border:2px solid transparent;scroll-snap-align:start;font-size:12px}
+.dia b{display:block;font-size:14px}
+.dia.sel{border-color:#1b1f1c}
+.am{background:#b71c1c;color:#fff}
+.al{background:#ffb300;color:#1b1f1c}
+.at{background:#fff3a6;color:#1b1f1c}
+.no{background:#f1f3f2;color:#4a5350}
+.off{background:#fafafa;color:#8a8f8c}
+.lista{list-style:none;margin:0;padding:0}
+.lista li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--borda)}
+.lista li:last-child{border-bottom:0}
+.tag{border-radius:6px;padding:5px 9px;font-size:13px;font-weight:600;white-space:nowrap;text-align:center;min-width:96px}
+.tag small{display:block;font-weight:400;font-size:11px;opacity:.85}
+.nome small{display:block;color:var(--sub);font-size:12px}
+.wx{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
+.wx div{background:#f3f6f4;border-radius:8px;padding:8px 4px;font-size:12px;color:var(--sub)}
+.wx b{display:block;color:var(--txt);font-size:16px}
+.legenda span{display:inline-block;border-radius:5px;padding:2px 8px;font-size:12px;margin:0 4px 4px 0}
+.notas{font-size:12px;color:#33403a;line-height:1.5;padding-left:18px;margin:0}
+</style>
+</head>
+<body>
+<header>
+  <img src="icon-192.png" alt="">
+  <h1>Alerta Milho</h1>
+  <button id="sair" class="hidden">Sair</button>
+</header>
+<main>
+  <!-- Login -->
+  <section id="telaLogin" class="card hidden">
+    <h2>Entrar</h2>
+    <form id="formLogin" autocomplete="on">
+      <label for="email">E-mail</label>
+      <input id="email" type="email" autocomplete="username" required>
+      <label for="senha">Senha</label>
+      <input id="senha" type="password" autocomplete="current-password" required>
+      <button class="btn" type="submit">Entrar</button>
+    </form>
+    <button class="link" id="esqueci">Esqueci minha senha</button>
+    <div id="msgLogin"></div>
+  </section>
+
+  <!-- Definir senha (convite ou recuperação) -->
+  <section id="telaSenha" class="card hidden">
+    <h2>Definir senha</h2>
+    <p class="sub">Crie a senha que você vai usar para entrar no app.</p>
+    <form id="formSenha">
+      <label for="nova1">Nova senha (mínimo 8 caracteres)</label>
+      <input id="nova1" type="password" autocomplete="new-password" minlength="8" required>
+      <label for="nova2">Repita a senha</label>
+      <input id="nova2" type="password" autocomplete="new-password" minlength="8" required>
+      <button class="btn" type="submit">Salvar senha</button>
+    </form>
+    <div id="msgSenha"></div>
+  </section>
+
+  <!-- Sem permissão -->
+  <section id="telaSemAcesso" class="card hidden">
+    <h2>Acesso não liberado</h2>
+    <p class="sub">Seu login funcionou, mas este usuário ainda não tem acesso ao app de alertas. Fale com o administrador.</p>
+  </section>
+
+  <!-- App -->
+  <section id="telaApp" class="hidden">
+    <div class="card">
+      <label for="busca">Município</label>
+      <input id="busca" type="search" placeholder="Digite para buscar" autocomplete="off">
+      <select id="loc"></select>
+      <label for="sea">Época</label>
+      <select id="sea"></select>
+      <label for="hyb">Híbrido</label>
+      <select id="hyb"></select>
+      <label for="stg">Estádio fenológico</label>
+      <select id="stg"></select>
+      <p class="sub" id="fresh" style="margin:12px 0 0"></p>
+    </div>
+    <div id="resultado"></div>
+    <div class="card">
+      <h2>Como ler</h2>
+      <div class="legenda"><span class="am">Alerta máximo</span><span class="al">Alerta</span><span class="at">Atenção</span><span class="no">— sem ação</span></div>
+      <ul class="notas">
+        <li>O risco de cada doença vem da previsão do tempo (Open-Meteo, 7 dias, atualizada todo dia de madrugada) e dos limiares de favorabilidade da proposta v2.</li>
+        <li>A ação cruza esse risco com a tolerância do híbrido na planilha de notas. Fora da janela de estádio (escala Embrapa), a doença não gera alerta.</li>
+        <li>Ferrugem polissora: risco baixo acima de 700 m de altitude. Fusariose de colmo: ainda não avaliada.</li>
+        <li>Safrinha: a planilha só tem notas de Bipolaris e Mancha branca; as demais aparecem como "Sem nota".</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="telaCarregando" class="card"><p class="sub">Carregando…</p></section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL = "https://cvbgpfwfamnphvgadeou.supabase.co";
+const SUPABASE_KEY = "sb_publishable_F8EKP0xSjivCJZRo4DfpmQ_ngiqJKtS"; // chave pública; o acesso aos dados é controlado no banco
+const STAGES = ["VE","V1","V2","V3","V4","V5","V6","V7","V8","V9","VT","R1","R2","R3","R4","R5","R6"];
+const DISEASES = ["Mancha branca","Helmintosporiose","Bipolaris","Cercospora","Ferrugem polissora","Mancha de Diplodia","Antracnose de colmo","Fusariose de colmo","Estria bacteriana"];
+const RANK = {"Alerta máximo":4,"Alerta":3,"Atenção":2,"—":0};
+const DIAS_SEM = ["dom","seg","ter","qua","qui","sex","sáb"];
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const cls = (a) => a==="Alerta máximo"?"am":a==="Alerta"?"al":a==="Atenção"?"at":"no";
+const num = (v) => v == null ? null : Number(v);
+const semAcento = (s) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+const guardar = (k, v) => { try { localStorage.setItem("am_" + k, v); } catch (e) {} };
+const ler = (k) => { try { return localStorage.getItem("am_" + k) || ""; } catch (e) { return ""; } };
+
+// Link de convite ou de recuperação de senha chega com #...type=invite|recovery
+const tipoLink = new URLSearchParams(location.hash.slice(1)).get("type");
+const erroLink = new URLSearchParams(location.hash.slice(1)).get("error_description");
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+
+let BASE = null, MUN = null, munCode = null, diaSel = 0, precisaSenha = (tipoLink === "invite" || tipoLink === "recovery");
+
+function mostrar(tela) {
+  ["telaLogin","telaSenha","telaSemAcesso","telaApp","telaCarregando"].forEach((t) => $(t).classList.toggle("hidden", t !== tela));
+  $("sair").classList.toggle("hidden", tela === "telaLogin" || tela === "telaCarregando");
+}
+function msg(el, texto, tipo) { $(el).innerHTML = texto ? '<div class="msg ' + tipo + '">' + esc(texto) + '</div>' : ""; }
+function traduz(e) {
+  const m = (e && e.message) || "";
+  if (/Invalid login credentials/i.test(m)) return "E-mail ou senha incorretos.";
+  if (/Email not confirmed/i.test(m)) return "Seu e-mail ainda não foi confirmado. Use o link do convite.";
+  if (/rate limit|too many/i.test(m)) return "Muitas tentativas. Aguarde alguns minutos e tente de novo.";
+  if (/Failed to fetch|NetworkError|network/i.test(m)) return "Sem conexão com a internet.";
+  if (/should be different/i.test(m)) return "A nova senha precisa ser diferente da anterior.";
+  if (/at least|weak|short/i.test(m)) return "Senha fraca. Use pelo menos 8 caracteres.";
+  return m || "Erro inesperado.";
+}
+
+// ---------- Login ----------
+$("formLogin").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const b = ev.submitter || ev.target.querySelector("button"); b.disabled = true; msg("msgLogin", "");
+  const { error } = await sb.auth.signInWithPassword({ email: $("email").value.trim(), password: $("senha").value });
+  b.disabled = false;
+  if (error) msg("msgLogin", traduz(error), "err");
+});
+$("esqueci").addEventListener("click", async () => {
+  const email = $("email").value.trim();
+  if (!email) { msg("msgLogin", "Digite seu e-mail acima e toque de novo em \"Esqueci minha senha\".", "err"); return; }
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+  msg("msgLogin", error ? traduz(error) : "Se este e-mail tiver acesso, você vai receber um link para criar uma nova senha.", error ? "err" : "ok");
+});
+$("formSenha").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  if ($("nova1").value !== $("nova2").value) { msg("msgSenha", "As senhas não conferem.", "err"); return; }
+  const b = ev.target.querySelector("button"); b.disabled = true;
+  const { error } = await sb.auth.updateUser({ password: $("nova1").value });
+  b.disabled = false;
+  if (error) { msg("msgSenha", traduz(error), "err"); return; }
+  precisaSenha = false;
+  history.replaceState(null, "", location.pathname);
+  entrarNoApp();
+});
+$("sair").addEventListener("click", async () => { await sb.auth.signOut(); BASE = null; MUN = null; mostrar("telaLogin"); });
+
+sb.auth.onAuthStateChange((evento, sessao) => {
+  if (evento === "PASSWORD_RECOVERY") { precisaSenha = true; mostrar("telaSenha"); return; }
+  if (evento === "SIGNED_OUT") { mostrar("telaLogin"); return; }
+  if (evento === "SIGNED_IN" && sessao) setTimeout(() => (precisaSenha ? mostrar("telaSenha") : entrarNoApp()), 0);
+});
+
+(async () => {
+  const { data } = await sb.auth.getSession();
+  if (!data.session) {
+    mostrar("telaLogin");
+    if (erroLink) msg("msgLogin", "O link expirou ou já foi usado. Peça um novo convite ou use \"Esqueci minha senha\".", "err");
+    return;
+  }
+  if (precisaSenha) mostrar("telaSenha"); else entrarNoApp();
+})();
+
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+
+// ---------- Dados ----------
+let carregandoBase = false;
+async function entrarNoApp() {
+  if (BASE) { mostrar("telaApp"); return; }
+  if (carregandoBase) return;
+  carregandoBase = true;
+  mostrar("telaCarregando");
+  const { data, error } = await sb.rpc("alerta_milho_base");
+  carregandoBase = false;
+  if (error) { mostrar("telaApp"); $("resultado").innerHTML = '<div class="card"><div class="msg err">' + esc(traduz(error)) + '</div><button class="btn" onclick="entrarNoApp()">Tentar de novo</button></div>'; return; }
+  if (!data) { mostrar("telaSemAcesso"); return; }
+  BASE = data; BASE.tol = BASE.tol || [];
+  BASE.mat = {}; (data.matriz || []).forEach(([r, c, a]) => { (BASE.mat[r] = BASE.mat[r] || {})[c] = a; });
+  BASE.win = {}; (data.janelas || []).forEach(([dz, a, b]) => { BASE.win[dz] = a && b ? [STAGES.indexOf(a), STAGES.indexOf(b)] : null; });
+  const ex = data.exec;
+  $("fresh").textContent = ex ? "Previsão atualizada em " + new Date(ex.terminado_em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" }) : "Ainda não há previsão coletada.";
+  mostrar("telaApp");
+  // Seleções anteriores
+  fill($("sea"), [{ v: "Verão", t: "Safra (Verão)" }, { v: "Safrinha", t: "Safrinha" }], "Selecione a época"); $("sea").value = ler("sea");
+  fill($("stg"), STAGES.map((s, i) => ({ v: String(i), t: s })), "Selecione o estádio"); $("stg").value = ler("stg");
+  fillLoc(); $("loc").value = ler("loc");
+  fillHyb(); $("hyb").value = ler("hyb");
+  if ($("loc").value) loadMun(); else render();
+}
+function fill(sel, items, ph) {
+  const keep = sel.value; sel.innerHTML = "";
+  const o = document.createElement("option"); o.value = ""; o.textContent = ph; sel.appendChild(o);
+  items.forEach((i) => { const e = document.createElement("option"); e.value = i.v; e.textContent = i.t; sel.appendChild(e); });
+  if ([...sel.options].some((x) => x.value === keep)) sel.value = keep;
+}
+function fillLoc() {
+  const q = semAcento($("busca").value.trim());
+  const list = BASE.municipios.filter((m) => !q || semAcento(m[1]).includes(q)).map((m) => ({ v: String(m[0]), t: m[1] }));
+  fill($("loc"), list, list.length ? "Selecione o município (" + list.length + ")" : "Nenhum município encontrado");
+  if (q && list.length === 1 && $("loc").value !== list[0].v) { $("loc").value = list[0].v; loadMun(); }
+}
+function fillHyb() {
+  const sea = $("sea").value;
+  const nomes = [...new Set(BASE.tol.filter((t) => t[1] === sea).map((t) => t[0]))].sort((a, b) => a.localeCompare(b, "pt", { numeric: true }));
+  fill($("hyb"), nomes.map((n) => ({ v: n, t: n })), sea ? "Selecione o híbrido" : "Escolha a época antes");
+}
+$("busca").addEventListener("input", fillLoc);
+$("loc").addEventListener("change", () => { guardar("loc", $("loc").value); loadMun(); });
+$("sea").addEventListener("change", () => { guardar("sea", $("sea").value); fillHyb(); guardar("hyb", $("hyb").value); render(); });
+$("hyb").addEventListener("change", () => { guardar("hyb", $("hyb").value); render(); });
+$("stg").addEventListener("change", () => { guardar("stg", $("stg").value); render(); });
+
+async function loadMun() {
+  const code = $("loc").value; MUN = null; munCode = code || null; diaSel = 0;
+  if (!code) { render(); return; }
+  $("resultado").innerHTML = '<div class="card"><p class="sub">Carregando previsão…</p></div>';
+  const { data, error } = await sb.rpc("alerta_milho_municipio", { p_codigo_ibge: parseInt(code, 10) });
+  if ($("loc").value !== code) return;
+  if (error) { $("resultado").innerHTML = '<div class="card"><div class="msg err">' + esc(traduz(error)) + '</div><button class="btn" onclick="loadMun()">Tentar de novo</button></div>'; return; }
+  if (!data) { mostrar("telaSemAcesso"); return; }
+  MUN = { prev: data.prev || [], risco: {} };
+  (data.risco || []).forEach(([dt, dz, r]) => { (MUN.risco[dt] = MUN.risco[dt] || {})[dz] = r; });
+  render();
+}
+
+function acao(level, t) {
+  if (level === "n/a") return { a: "Sem limiar", sub: "não avaliada", c: "no" };
+  if (!t || !t[4]) return { a: "Sem nota", sub: "risco " + level, c: "no" };
+  const a = (BASE.mat[level] || {})[t[4]] || "—";
+  return { a, sub: "risco " + level + " · " + t[4], c: cls(a) };
+}
+function rotuloDia(s) { const d = new Date(s + "T12:00:00"); return DIAS_SEM[d.getDay()] + " " + s.slice(8, 10) + "/" + s.slice(5, 7); }
+
+function render() {
+  const out = $("resultado");
+  const loc = $("loc").value, sea = $("sea").value, h = $("hyb").value, s = $("stg").value;
+  if (!loc || !sea || !h || s === "") { out.innerHTML = '<div class="card"><p class="sub">Selecione município, época, híbrido e estádio para ver o alerta.</p></div>'; return; }
+  if (!MUN || munCode !== loc) return;
+  const dias = MUN.prev.map((p) => p.data);
+  if (!dias.length) { out.innerHTML = '<div class="card"><p class="sub">Ainda não há previsão para este município a partir de hoje.</p></div>'; return; }
+  const si = +s;
+  const tol = (dz) => BASE.tol.find((t) => t[0] === h && t[1] === sea && t[2] === dz);
+  const ativa = (dz) => { const w = BASE.win[dz]; return !w || (si >= w[0] && si <= w[1]); };
+  // por dia: lista de doenças e ação máxima
+  const porDia = dias.map((d) => {
+    let max = { a: "—", dz: null };
+    const itens = DISEASES.map((dz) => {
+      if (!ativa(dz)) return { dz, fora: true };
+      const r = (MUN.risco[d] || {})[dz];
+      if (!r) return { dz, x: { a: "—", sub: "sem dado", c: "no" } };
+      const x = acao(r, tol(dz));
+      if (RANK[x.a] !== undefined && RANK[x.a] > RANK[max.a]) max = { a: x.a, dz };
+      return { dz, x };
+    });
+    return { d, max, itens };
+  });
+  if (diaSel >= dias.length) diaSel = 0;
+  const nome = $("loc").options[$("loc").selectedIndex].textContent;
+  let html = '<div class="card"><h2>' + esc(nome) + ' · ' + esc(h) + ' · ' + STAGES[si] + '</h2><div class="dias">';
+  porDia.forEach((p, i) => {
+    html += '<div class="dia ' + cls(p.max.a) + (i === diaSel ? " sel" : "") + '" data-i="' + i + '" role="button" tabindex="0"><b>' + rotuloDia(p.d) + '</b>' + esc(p.max.a) + (p.max.dz ? '<br><small>' + esc(p.max.dz) + '</small>' : "") + '</div>';
+  });
+  html += '</div></div>';
+  const p = porDia[diaSel], w = MUN.prev[diaSel];
+  html += '<div class="card"><h2>' + rotuloDia(p.d) + ' · por doença</h2><ul class="lista">';
+  p.itens.forEach((it) => {
+    const jan = BASE.win[it.dz];
+    const sub = jan ? "janela " + STAGES[jan[0]] + "–" + STAGES[jan[1]] : "todos os estádios";
+    if (it.fora) html += '<li><span class="nome">' + esc(it.dz) + '<small>' + sub + '</small></span><span class="tag off">Fora do estádio</span></li>';
+    else html += '<li><span class="nome">' + esc(it.dz) + '<small>' + sub + '</small></span><span class="tag ' + it.x.c + '">' + esc(it.x.a) + '<small>' + esc(it.x.sub) + '</small></span></li>';
+  });
+  html += '</ul></div>';
+  const elev = num(w.elevacao_m);
+  html += '<div class="card"><h2>Tempo previsto · ' + rotuloDia(p.d) + '</h2><div class="wx">' +
+    '<div>T média<b>' + num(w.t_media).toFixed(1) + ' °C</b></div>' +
+    '<div>Mín–máx<b>' + Math.round(num(w.t_min)) + '–' + Math.round(num(w.t_max)) + ' °C</b></div>' +
+    '<div>UR média<b>' + Math.round(num(w.ur_media)) + '%</b></div>' +
+    '<div>Horas UR≥90%<b>' + w.h_ur90 + ' h</b></div>' +
+    '<div>Chuva<b>' + num(w.precip_mm).toFixed(1) + ' mm</b></div>' +
+    '<div>Nebulosidade<b>' + Math.round(num(w.nebulosidade_media)) + '%</b></div>' +
+    '</div>' + (elev != null ? '<p class="sub" style="margin:10px 0 0">Altitude da célula de previsão: ' + Math.round(elev) + ' m</p>' : '') + '</div>';
+  out.innerHTML = html;
+  out.querySelectorAll(".dia").forEach((el) => {
+    const go = () => { diaSel = +el.dataset.i; render(); };
+    el.addEventListener("click", go);
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+  });
+}
+</script>
+</body>
+</html>
