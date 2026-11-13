@@ -164,6 +164,15 @@ main{padding-bottom:calc(84px + env(safe-area-inset-bottom))}
 
    <div id="abaOcorr" class="hidden">
     <div class="card">
+      <h2>🔔 Avisos no celular</h2>
+      <p class="sub" id="nStatus" style="margin:0 0 6px">Receba uma notificação quando alguém registrar uma ocorrência perto de você, mesmo com o app fechado.</p>
+      <label for="nRaio">Avisar ocorrências num raio de</label>
+      <select id="nRaio"><option value="10">10 km</option><option value="25">25 km</option><option value="50" selected>50 km</option><option value="100">100 km</option></select>
+      <button class="btn" id="nAtivar" type="button">Ativar avisos</button>
+      <button class="btn2 hidden" id="nDesativar" type="button">Desativar avisos neste celular</button>
+      <div id="nMsg"></div>
+    </div>
+    <div class="card">
       <h2>Perto de você</h2>
       <label for="pRaio">Raio de busca</label>
       <select id="pRaio"><option value="10">10 km</option><option value="25">25 km</option><option value="50" selected>50 km</option><option value="100">100 km</option></select>
@@ -325,7 +334,10 @@ async function entrarNoApp() {
   fillHyb(); $("hyb").value = ler("hyb");
   if ($("loc").value) loadMun(); else render();
   prepararOcorr();
-  mostrarAba(ler("aba") === "ocorr" ? "ocorr" : "alertas");
+  const abaUrl = new URLSearchParams(location.search).get("aba");
+  mostrarAba(abaUrl === "ocorr" || (!abaUrl && ler("aba") === "ocorr") ? "ocorr" : "alertas");
+  if (abaUrl) history.replaceState(null, "", location.pathname);
+  prepararAvisos();
   carregarOcorr();
 }
 function fill(sel, items, ph) {
@@ -482,6 +494,7 @@ function pegarGps() {
   $("oGpsInfo").textContent = "Buscando sua localização…";
   navigator.geolocation.getCurrentPosition((pos) => {
     gps = { lat: pos.coords.latitude, lon: pos.coords.longitude, prec: Math.round(pos.coords.accuracy) };
+    atualizarLocalAviso(gps.lat, gps.lon);
     const aviso = gps.prec > 500 ? " A precisão está baixa; se puder, espere alguns segundos e toque de novo." : "";
     $("oGpsInfo").textContent = "Localização obtida (precisão de ±" + gps.prec + " m)." + aviso;
   }, (err) => {
@@ -546,6 +559,7 @@ function pertoDeMim() {
   navigator.geolocation.getCurrentPosition((pos) => {
     aqui = { lat: pos.coords.latitude, lon: pos.coords.longitude };
     desenharPerto();
+    atualizarLocalAviso(aqui.lat, aqui.lon);
   }, (err) => {
     aqui = null;
     $("pLista").innerHTML = '<div class="msg err">' + (err.code === 1
@@ -623,6 +637,97 @@ function cardOcorrMunicipio(codigo, nome) {
     : '<p class="sub">Nenhuma ocorrência registrada neste município.</p>';
   if (lista.length > 5) h += '<p class="sub">E mais ' + (lista.length - 5) + '.</p>';
   return h + '<button class="btn2" id="verMapa" type="button">Ver ocorrências no mapa</button></div>';
+}
+
+// ---------- Avisos (notificações push) ----------
+const ehIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+const instalado = () => window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const suportaPush = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+let inscricao = null, vapid = null, avisosProntos = false;
+
+function b64uParaBytes(b64) {
+  const pad = "=".repeat((4 - (b64.length % 4)) % 4);
+  const bin = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+}
+function posicaoAtual() {
+  return new Promise((ok, falha) => {
+    if (!("geolocation" in navigator)) { falha(new Error("sem_gps")); return; }
+    navigator.geolocation.getCurrentPosition((p) => ok({ lat: p.coords.latitude, lon: p.coords.longitude }),
+      (e) => falha(new Error(e.code === 1 ? "gps_negado" : "gps_falhou")), { enableHighAccuracy: false, timeout: 20000, maximumAge: 300000 });
+  });
+}
+function estadoAvisos(ativo, raio) {
+  $("nAtivar").classList.toggle("hidden", ativo);
+  $("nDesativar").classList.toggle("hidden", !ativo);
+  $("nAtivar").textContent = "Ativar avisos";
+  if (ativo) {
+    if (raio) $("nRaio").value = String(raio);
+    $("nStatus").innerHTML = "<b>Avisos ativos neste celular</b> para ocorrências num raio de " + $("nRaio").value + " km da sua última localização. A localização é atualizada sempre que você usa o GPS no app.";
+  }
+}
+async function prepararAvisos() {
+  if (avisosProntos) return; avisosProntos = true;
+  $("nAtivar").addEventListener("click", ativarAvisos);
+  $("nDesativar").addEventListener("click", desativarAvisos);
+  $("nRaio").addEventListener("change", () => { if (inscricao) ativarAvisos(); });
+  if (!suportaPush()) {
+    $("nAtivar").disabled = true;
+    msg("nMsg", ehIOS && !instalado()
+      ? "No iPhone, primeiro instale o app: no Safari, toque em Compartilhar → Adicionar à Tela de Início. Depois abra o app pelo ícone e ative os avisos."
+      : "Este navegador não permite notificações. No Android, use o Chrome; no iPhone, instale o app na Tela de Início.", "err");
+    return;
+  }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    inscricao = await reg.pushManager.getSubscription();
+    const { data } = await sb.rpc("alerta_milho_status_push", { p_endpoint: inscricao ? inscricao.endpoint : "" });
+    vapid = data && data.vapid_publica;
+    if (inscricao && data && data.inscrito) estadoAvisos(true, data.raio_km);
+    else estadoAvisos(false);
+    if (Notification.permission === "denied") msg("nMsg", "As notificações deste app estão bloqueadas. Libere nas configurações do navegador ou do celular para ativar os avisos.", "err");
+  } catch (e) { /* sem service worker ainda: o botão tenta de novo */ }
+}
+async function ativarAvisos() {
+  const b = $("nAtivar"); b.disabled = true; b.textContent = "Ativando…"; msg("nMsg", "");
+  try {
+    if (!vapid) { const { data } = await sb.rpc("alerta_milho_status_push", { p_endpoint: "" }); vapid = data && data.vapid_publica; }
+    if (!vapid) throw new Error("sem_chave");
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") throw new Error("notif_negada");
+    const pos = await posicaoAtual();
+    const reg = await navigator.serviceWorker.ready;
+    inscricao = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uParaBytes(vapid) });
+    const j = inscricao.toJSON();
+    const { error } = await sb.rpc("alerta_milho_salvar_push", {
+      p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth,
+      p_latitude: pos.lat, p_longitude: pos.lon, p_raio_km: +$("nRaio").value,
+    });
+    if (error) throw error;
+    estadoAvisos(true);
+    msg("nMsg", "Pronto! Você vai ser avisado quando alguém registrar uma ocorrência nesse raio.", "ok");
+  } catch (e) {
+    const m = (e && e.message) || "";
+    estadoAvisos(!!inscricao && $("nAtivar").classList.contains("hidden"));
+    msg("nMsg", m === "notif_negada" ? "Você não permitiu notificações. Libere nas configurações do navegador ou do celular e tente de novo."
+      : m === "gps_negado" ? "Para avisar ocorrências perto de você, o app precisa da sua localização. Libere o acesso à localização e tente de novo."
+      : m === "gps_falhou" || m === "sem_gps" ? "Não foi possível obter a localização. Verifique se o GPS está ligado."
+      : m === "sem_chave" ? "Os avisos ainda não estão configurados no servidor. Avise o administrador."
+      : "Não foi possível ativar os avisos: " + (traduz(e) || m), "err");
+  } finally { b.disabled = false; if (!$("nAtivar").classList.contains("hidden")) b.textContent = "Ativar avisos"; }
+}
+async function desativarAvisos() {
+  const b = $("nDesativar"); b.disabled = true;
+  try {
+    if (inscricao) { await sb.rpc("alerta_milho_remover_push", { p_endpoint: inscricao.endpoint }); await inscricao.unsubscribe(); }
+    inscricao = null;
+    estadoAvisos(false);
+    $("nStatus").textContent = "Avisos desativados neste celular.";
+    msg("nMsg", "");
+  } finally { b.disabled = false; }
+}
+function atualizarLocalAviso(lat, lon) {
+  if (inscricao) sb.rpc("alerta_milho_atualizar_local_push", { p_endpoint: inscricao.endpoint, p_latitude: lat, p_longitude: lon }).then(() => {}, () => {});
 }
 </script>
 </body>
