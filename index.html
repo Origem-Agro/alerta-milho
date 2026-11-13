@@ -11,6 +11,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
 <title>Alerta de Doenças do Milho</title>
 <style>
 :root{color-scheme:light;--verde:#1e5e3a;--fundo:#eef2ef;--txt:#1b1f1c;--sub:#4a5350;--borda:#d5ddd9}
@@ -60,6 +61,30 @@ input,select{width:100%;padding:11px 10px;font-size:16px;border:1px solid #b8c2b
 .matriz th{font-weight:600;color:var(--sub);padding:4px}
 .matriz td{border-radius:5px;padding:7px 4px;font-weight:600}
 .notas{font-size:12px;color:#33403a;line-height:1.5;padding-left:18px;margin:0}
+main{padding-bottom:calc(84px + env(safe-area-inset-bottom))}
+.abas{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--borda);display:flex;z-index:1000;padding-bottom:env(safe-area-inset-bottom)}
+.abas button{flex:1;background:none;border:0;padding:10px 4px 12px;font-size:13px;color:var(--sub);font-weight:600}
+.abas button span{display:block;font-size:20px;line-height:1.2}
+.abas button.ativa{color:var(--verde);box-shadow:inset 0 3px 0 var(--verde)}
+.sev{display:flex;gap:6px}
+.sev label{flex:1;margin:0;cursor:pointer}
+.sev input{position:absolute;opacity:0;width:1px;height:1px}
+.sev span{display:block;text-align:center;padding:11px 4px;border:2px solid #b8c2bd;border-radius:8px;font-size:14px;color:var(--txt);font-weight:600}
+.sev span{opacity:.45}
+.sev input:checked + span{opacity:1;border-color:#1b1f1c;box-shadow:0 0 0 3px rgba(0,0,0,.18)}
+.sev input:checked + span::before{content:"✓ "}
+.sev .s-baixa span,.dot.s-baixa{background:#fff176}
+.sev .s-media span,.dot.s-media{background:#f9a825}
+.sev .s-alta span,.dot.s-alta{background:#b71c1c;color:#fff}
+.btn2{width:100%;margin-top:6px;padding:11px;border:1px solid var(--verde);border-radius:8px;background:#fff;color:var(--verde);font-size:15px;font-weight:600}
+#mapa{height:320px;border-radius:10px;margin:10px 0;z-index:1}
+.oc{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--borda)}
+.oc:last-child{border-bottom:0}
+.dot{flex:0 0 14px;height:14px;border-radius:50%;margin-top:4px;border:1px solid rgba(0,0,0,.25)}
+.oc .tx{flex:1;font-size:14px}
+.oc .tx small{display:block;color:var(--sub);font-size:12px;margin-top:2px}
+.oc button{background:none;border:0;color:#7a1212;font-size:12px;text-decoration:underline;padding:2px}
+.filtros{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 </style>
 </head>
 <body>
@@ -105,6 +130,7 @@ input,select{width:100%;padding:11px 10px;font-size:16px;border:1px solid #b8c2b
 
   <!-- App -->
   <section id="telaApp" class="hidden">
+   <div id="abaAlertas">
     <div class="card">
       <label for="busca">Município</label>
       <input id="busca" type="search" placeholder="Digite para buscar" autocomplete="off">
@@ -134,12 +160,54 @@ input,select{width:100%;padding:11px 10px;font-size:16px;border:1px solid #b8c2b
         <li>Safrinha: a planilha só tem notas de Bipolaris e Mancha branca; as demais aparecem como "Sem nota".</li>
       </ul>
     </div>
+   </div>
+
+   <div id="abaOcorr" class="hidden">
+    <div class="card">
+      <h2>Registrar ocorrência</h2>
+      <label for="oDz">Doença</label>
+      <select id="oDz"></select>
+      <label>Severidade</label>
+      <div class="sev">
+        <label class="s-baixa"><input type="radio" name="oSev" value="baixa"><span>Baixa</span></label>
+        <label class="s-media"><input type="radio" name="oSev" value="média"><span>Média</span></label>
+        <label class="s-alta"><input type="radio" name="oSev" value="alta"><span>Alta</span></label>
+      </div>
+      <label for="oSea">Época</label>
+      <select id="oSea"></select>
+      <label for="oHyb">Híbrido</label>
+      <select id="oHyb"></select>
+      <label for="oStg">Estádio fenológico</label>
+      <select id="oStg"></select>
+      <label>Localização</label>
+      <button class="btn2" id="oGps" type="button">📍 Usar a localização do celular</button>
+      <p class="sub" id="oGpsInfo" style="margin:8px 0 0">Registre a ocorrência estando na lavoura.</p>
+      <button class="btn" id="oSalvar" type="button">Registrar ocorrência</button>
+      <div id="oMsg"></div>
+      <p class="sub" style="margin:12px 0 0">Seu nome não aparece para os outros usuários. Eles veem a doença, a severidade, o híbrido, o estádio e o município. No mapa, o ponto é arredondado para cerca de 1 km.</p>
+    </div>
+    <div class="card">
+      <h2>Ocorrências recentes</h2>
+      <div class="filtros">
+        <div><label for="oDias">Período</label><select id="oDias"><option value="7">Últimos 7 dias</option><option value="30" selected>Últimos 30 dias</option><option value="90">Últimos 90 dias</option></select></div>
+        <div><label for="oFiltro">Doença</label><select id="oFiltro"></select></div>
+      </div>
+      <div id="mapa"></div>
+      <div id="oLista"><p class="sub">Carregando…</p></div>
+    </div>
+   </div>
+
+   <nav class="abas">
+     <button id="tabAlertas" class="ativa" type="button"><span>⚠️</span>Alertas</button>
+     <button id="tabOcorr" type="button"><span>📍</span>Ocorrências</button>
+   </nav>
   </section>
 
   <section id="telaCarregando" class="card"><p class="sub">Carregando…</p></section>
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 <script>
 const SUPABASE_URL = "https://cvbgpfwfamnphvgadeou.supabase.co";
 const SUPABASE_KEY = "sb_publishable_F8EKP0xSjivCJZRo4DfpmQ_ngiqJKtS"; // chave pública; o acesso aos dados é controlado no banco
@@ -249,6 +317,9 @@ async function entrarNoApp() {
   fillLoc(); $("loc").value = ler("loc");
   fillHyb(); $("hyb").value = ler("hyb");
   if ($("loc").value) loadMun(); else render();
+  prepararOcorr();
+  mostrarAba(ler("aba") === "ocorr" ? "ocorr" : "alertas");
+  carregarOcorr();
 }
 function fill(sel, items, ph) {
   const keep = sel.value; sel.innerHTML = "";
@@ -342,12 +413,164 @@ function render() {
     '<div>Chuva<b>' + num(w.precip_mm).toFixed(1) + ' mm</b></div>' +
     '<div>Nebulosidade<b>' + Math.round(num(w.nebulosidade_media)) + '%</b></div>' +
     '</div>' + (elev != null ? '<p class="sub" style="margin:10px 0 0">Altitude da célula de previsão: ' + Math.round(elev) + ' m</p>' : '') + '</div>';
+  html += cardOcorrMunicipio(loc, nome);
   out.innerHTML = html;
+  const vm = $("verMapa"); if (vm) vm.addEventListener("click", () => mostrarAba("ocorr"));
   out.querySelectorAll(".dia").forEach((el) => {
     const go = () => { diaSel = +el.dataset.i; render(); };
     el.addEventListener("click", go);
     el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
   });
+}
+
+// ---------- Ocorrências ----------
+let OCORR = null, mapa = null, camada = null, gps = null;
+const SEV_CLS = { "baixa": "s-baixa", "média": "s-media", "alta": "s-alta" };
+const SEV_COR = { "baixa": "#fff176", "média": "#f9a825", "alta": "#b71c1c" };
+const fmtQuando = (s) => new Date(s).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+
+function mostrarAba(a) {
+  $("abaAlertas").classList.toggle("hidden", a !== "alertas");
+  $("abaOcorr").classList.toggle("hidden", a !== "ocorr");
+  $("tabAlertas").classList.toggle("ativa", a === "alertas");
+  $("tabOcorr").classList.toggle("ativa", a === "ocorr");
+  guardar("aba", a);
+  window.scrollTo(0, 0);
+  if (a === "ocorr") { if (ocorrPronto) copiarSelecao(); iniciarMapa(); setTimeout(() => { if (mapa) mapa.invalidateSize(); desenharOcorr(); }, 50); }
+}
+$("tabAlertas").addEventListener("click", () => mostrarAba("alertas"));
+$("tabOcorr").addEventListener("click", () => mostrarAba("ocorr"));
+
+let ocorrPronto = false;
+function fillOHyb() {
+  const sea = $("oSea").value;
+  const nomes = [...new Set(BASE.tol.filter((t) => t[1] === sea).map((t) => t[0]))].sort((a, b) => a.localeCompare(b, "pt", { numeric: true }));
+  fill($("oHyb"), nomes.map((n) => ({ v: n, t: n })), sea ? "Selecione o híbrido" : "Escolha a época antes");
+}
+// Preenche o formulário com a seleção da aba Alertas (só os campos ainda vazios)
+function copiarSelecao() {
+  if (!$("oSea").value && $("sea").value) { $("oSea").value = $("sea").value; fillOHyb(); }
+  if (!$("oHyb").value && $("hyb").value && $("oSea").value === $("sea").value) $("oHyb").value = $("hyb").value;
+  if (!$("oStg").value && $("stg").value !== "") $("oStg").value = STAGES[+$("stg").value];
+}
+function prepararOcorr() {
+  if (ocorrPronto) return; ocorrPronto = true;
+  fill($("oDz"), DISEASES.map((d) => ({ v: d, t: d })), "Selecione a doença");
+  fill($("oFiltro"), DISEASES.map((d) => ({ v: d, t: d })), "Todas");
+  fill($("oSea"), [{ v: "Verão", t: "Safra (Verão)" }, { v: "Safrinha", t: "Safrinha" }], "Selecione a época");
+  fill($("oStg"), STAGES.map((s) => ({ v: s, t: s })), "Selecione o estádio");
+  copiarSelecao();
+  $("oSea").addEventListener("change", fillOHyb);
+  $("oDias").addEventListener("change", carregarOcorr);
+  $("oFiltro").addEventListener("change", desenharOcorr);
+  $("oGps").addEventListener("click", pegarGps);
+  $("oSalvar").addEventListener("click", salvarOcorr);
+}
+
+function pegarGps() {
+  if (!("geolocation" in navigator)) { $("oGpsInfo").textContent = "Este aparelho não informa a localização."; return; }
+  $("oGpsInfo").textContent = "Buscando sua localização…";
+  navigator.geolocation.getCurrentPosition((pos) => {
+    gps = { lat: pos.coords.latitude, lon: pos.coords.longitude, prec: Math.round(pos.coords.accuracy) };
+    const aviso = gps.prec > 500 ? " A precisão está baixa; se puder, espere alguns segundos e toque de novo." : "";
+    $("oGpsInfo").textContent = "Localização obtida (precisão de ±" + gps.prec + " m)." + aviso;
+  }, (err) => {
+    gps = null;
+    $("oGpsInfo").textContent = err.code === 1
+      ? "O acesso à localização foi negado. Libere a localização para este app nas configurações do navegador ou do celular."
+      : "Não foi possível obter a localização. Verifique se o GPS está ligado e tente de novo.";
+  }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+}
+
+async function salvarOcorr() {
+  const sev = (document.querySelector('input[name="oSev"]:checked') || {}).value;
+  const faltam = [];
+  if (!$("oDz").value) faltam.push("doença");
+  if (!sev) faltam.push("severidade");
+  if (!$("oSea").value) faltam.push("época");
+  if (!$("oHyb").value) faltam.push("híbrido");
+  if (!$("oStg").value) faltam.push("estádio");
+  if (!gps) faltam.push("localização");
+  if (faltam.length) { msg("oMsg", "Falta informar: " + faltam.join(", ") + ".", "err"); return; }
+  const b = $("oSalvar"); b.disabled = true; msg("oMsg", "");
+  const { data, error } = await sb.rpc("alerta_milho_registrar_ocorrencia", {
+    p_doenca: $("oDz").value, p_severidade: sev, p_hibrido: $("oHyb").value, p_epoca: $("oSea").value,
+    p_estadio: $("oStg").value, p_latitude: gps.lat, p_longitude: gps.lon, p_precisao_m: gps.prec,
+  });
+  b.disabled = false;
+  if (error) {
+    const m = error.message || "";
+    msg("oMsg", /fora_do_parana/.test(m) ? "Por enquanto só é possível registrar ocorrências no Paraná."
+      : /limite_diario/.test(m) ? "Você atingiu o limite de 30 registros por dia."
+      : /hibrido_invalido/.test(m) ? "Híbrido inválido para a época escolhida."
+      : /sem_acesso/.test(m) ? "Seu usuário não tem acesso ao app de alertas."
+      : traduz(error), "err");
+    return;
+  }
+  msg("oMsg", "Ocorrência registrada em " + data.municipio + ". Obrigado!", "ok");
+  document.querySelectorAll('input[name="oSev"]').forEach((r) => (r.checked = false));
+  gps = null; $("oGpsInfo").textContent = "Para registrar outra, pegue a localização de novo.";
+  carregarOcorr();
+}
+
+async function carregarOcorr() {
+  const { data, error } = await sb.rpc("alerta_milho_ocorrencias", { p_dias: +$("oDias").value || 30 });
+  if (error) { $("oLista").innerHTML = '<div class="msg err">' + esc(traduz(error)) + '</div>'; return; }
+  OCORR = data || [];
+  desenharOcorr();
+  if (!$("abaAlertas").classList.contains("hidden")) render();
+}
+
+function iniciarMapa() {
+  if (mapa || typeof L === "undefined") return;
+  mapa = L.map("mapa", { zoomControl: true }).setView([-24.7, -51.6], 6);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(mapa);
+  camada = L.layerGroup().addTo(mapa);
+}
+
+function textoOcorr(o) {
+  return '<b>' + esc(o.doenca) + '</b> · severidade ' + esc(o.severidade) +
+    '<small>' + esc(o.hibrido) + ' (' + esc(o.epoca) + ') · ' + esc(o.estadio) + ' · ' + esc(o.municipio) + ' · ' + fmtQuando(o.criado_em) + '</small>';
+}
+
+function desenharOcorr() {
+  if (!OCORR) return;
+  const f = $("oFiltro").value;
+  const lista = OCORR.filter((o) => !f || o.doenca === f);
+  const periodo = $("oDias").options[$("oDias").selectedIndex].textContent.toLowerCase();
+  $("oLista").innerHTML = lista.length
+    ? lista.map((o) => '<div class="oc"><span class="dot ' + SEV_CLS[o.severidade] + '"></span><div class="tx">' + textoOcorr(o) +
+        (o.minha ? '<button data-id="' + o.id + '">Excluir meu registro</button>' : '') + '</div></div>').join("")
+    : '<p class="sub">Nenhuma ocorrência registrada nos ' + esc(periodo.replace("últimos ", "últimos ")) + '.</p>';
+  $("oLista").querySelectorAll("button[data-id]").forEach((bt) => bt.addEventListener("click", async () => {
+    if (bt.dataset.confirma !== "1") { bt.dataset.confirma = "1"; bt.textContent = "Toque de novo para confirmar"; return; }
+    bt.disabled = true;
+    const { error } = await sb.rpc("alerta_milho_excluir_ocorrencia", { p_id: +bt.dataset.id });
+    if (error) { bt.textContent = "Erro ao excluir"; return; }
+    carregarOcorr();
+  }));
+  if (!mapa || !camada) return;
+  camada.clearLayers();
+  const pts = [];
+  lista.forEach((o) => {
+    const lat = num(o.lat), lon = num(o.lon); pts.push([lat, lon]);
+    L.circleMarker([lat, lon], { radius: 9, color: "#fff", weight: 2, fillColor: SEV_COR[o.severidade], fillOpacity: 0.95 })
+      .bindPopup('<div style="font-size:13px">' + textoOcorr(o).replace("<small>", "<br><small>") + '</div>').addTo(camada);
+  });
+  if (pts.length === 1) mapa.setView(pts[0], 10);
+  else if (pts.length > 1) mapa.fitBounds(pts, { padding: [24, 24], maxZoom: 11 });
+}
+
+function cardOcorrMunicipio(codigo, nome) {
+  if (!OCORR) return "";
+  const lista = OCORR.filter((o) => String(o.codigo_ibge) === String(codigo));
+  const periodo = $("oDias").options[$("oDias").selectedIndex].textContent.toLowerCase();
+  let h = '<div class="card"><h2>Ocorrências registradas em ' + esc(nome) + '</h2><p class="sub" style="margin:0 0 6px">' + esc(periodo.charAt(0).toUpperCase() + periodo.slice(1)) + ', por usuários do app.</p>';
+  h += lista.length
+    ? lista.slice(0, 5).map((o) => '<div class="oc"><span class="dot ' + SEV_CLS[o.severidade] + '"></span><div class="tx">' + textoOcorr(o) + '</div></div>').join("")
+    : '<p class="sub">Nenhuma ocorrência registrada neste município.</p>';
+  if (lista.length > 5) h += '<p class="sub">E mais ' + (lista.length - 5) + '.</p>';
+  return h + '<button class="btn2" id="verMapa" type="button">Ver ocorrências no mapa</button></div>';
 }
 </script>
 </body>
