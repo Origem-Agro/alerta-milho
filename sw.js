@@ -1,6 +1,6 @@
 // Service worker: guarda só os arquivos do app (para abrir rápido e funcionar como app instalado).
 // Os dados do Supabase nunca são guardados aqui; vêm sempre da rede.
-const VERSAO = "alerta-milho-v1";
+const VERSAO = "alerta-milho-v2";
 const ARQUIVOS = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png", "./apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {

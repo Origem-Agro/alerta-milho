@@ -38,11 +38,11 @@ input,select{width:100%;padding:11px 10px;font-size:16px;border:1px solid #b8c2b
 .dia{flex:0 0 auto;min-width:84px;border-radius:10px;padding:8px;text-align:center;border:2px solid transparent;scroll-snap-align:start;font-size:12px}
 .dia b{display:block;font-size:14px}
 .dia.sel{border-color:#1b1f1c}
-.am{background:#b71c1c;color:#fff}
-.al{background:#ffb300;color:#1b1f1c}
-.at{background:#fff3a6;color:#1b1f1c}
-.no{background:#f1f3f2;color:#4a5350}
-.off{background:#fafafa;color:#8a8f8c}
+.r-alto{background:#c62828;color:#fff}
+.r-medio{background:#fbc02d;color:#1b1f1c}
+.r-baixo{background:#2e7d32;color:#fff}
+.no{background:#eceff1;color:#4a5350}
+.off{background:#fff;color:#8a8f8c;border:1px dashed #c3cbc7}
 .lista{list-style:none;margin:0;padding:0}
 .lista li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--borda)}
 .lista li:last-child{border-bottom:0}
@@ -114,10 +114,10 @@ input,select{width:100%;padding:11px 10px;font-size:16px;border:1px solid #b8c2b
     <div id="resultado"></div>
     <div class="card">
       <h2>Como ler</h2>
-      <div class="legenda"><span class="am">Alerta máximo</span><span class="al">Alerta</span><span class="at">Atenção</span><span class="no">— sem ação</span></div>
+      <div class="legenda"><span class="r-alto">Risco alto</span><span class="r-medio">Risco médio</span><span class="r-baixo">Risco baixo</span><span class="no">Sem nota / sem dado</span><span class="off">Fora do estádio</span></div>
       <ul class="notas">
         <li>O risco de cada doença vem da previsão do tempo (Open-Meteo, 7 dias, atualizada todo dia de madrugada) e dos limiares de favorabilidade da proposta v2.</li>
-        <li>A ação cruza esse risco com a tolerância do híbrido na planilha de notas. Fora da janela de estádio (escala Embrapa), a doença não gera alerta.</li>
+        <li>A cor final cruza o risco do clima com a tolerância do híbrido na planilha de notas (T, MT, MS, S). Abaixo de cada cor aparece o risco do clima e a classe do híbrido.</li><li>Fora da janela de estádio (escala Embrapa), a doença não gera alerta.</li>
         <li>Ferrugem polissora: risco baixo acima de 700 m de altitude. Fusariose de colmo: ainda não avaliada.</li>
         <li>Safrinha: a planilha só tem notas de Bipolaris e Mancha branca; as demais aparecem como "Sem nota".</li>
       </ul>
@@ -133,12 +133,12 @@ const SUPABASE_URL = "https://cvbgpfwfamnphvgadeou.supabase.co";
 const SUPABASE_KEY = "sb_publishable_F8EKP0xSjivCJZRo4DfpmQ_ngiqJKtS"; // chave pública; o acesso aos dados é controlado no banco
 const STAGES = ["VE","V1","V2","V3","V4","V5","V6","V7","V8","V9","VT","R1","R2","R3","R4","R5","R6"];
 const DISEASES = ["Mancha branca","Helmintosporiose","Bipolaris","Cercospora","Ferrugem polissora","Mancha de Diplodia","Antracnose de colmo","Fusariose de colmo","Estria bacteriana"];
-const RANK = {"Alerta máximo":4,"Alerta":3,"Atenção":2,"—":0};
+const RANK = {"Risco alto":3,"Risco médio":2,"Risco baixo":1};
 const DIAS_SEM = ["dom","seg","ter","qua","qui","sex","sáb"];
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const cls = (a) => a==="Alerta máximo"?"am":a==="Alerta"?"al":a==="Atenção"?"at":"no";
+const cls = (a) => a==="Risco alto"?"r-alto":a==="Risco médio"?"r-medio":a==="Risco baixo"?"r-baixo":"no";
 const num = (v) => v == null ? null : Number(v);
 const semAcento = (s) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 const guardar = (k, v) => { try { localStorage.setItem("am_" + k, v); } catch (e) {} };
@@ -275,9 +275,9 @@ async function loadMun() {
 
 function acao(level, t) {
   if (level === "n/a") return { a: "Sem limiar", sub: "não avaliada", c: "no" };
-  if (!t || !t[4]) return { a: "Sem nota", sub: "risco " + level, c: "no" };
+  if (!t || !t[4]) return { a: "Sem nota", sub: "clima " + level, c: "no" };
   const a = (BASE.mat[level] || {})[t[4]] || "—";
-  return { a, sub: "risco " + level + " · " + t[4], c: cls(a) };
+  return { a, sub: "clima " + level + " · " + t[4], c: cls(a) };
 }
 function rotuloDia(s) { const d = new Date(s + "T12:00:00"); return DIAS_SEM[d.getDay()] + " " + s.slice(8, 10) + "/" + s.slice(5, 7); }
 
@@ -293,13 +293,13 @@ function render() {
   const ativa = (dz) => { const w = BASE.win[dz]; return !w || (si >= w[0] && si <= w[1]); };
   // por dia: lista de doenças e ação máxima
   const porDia = dias.map((d) => {
-    let max = { a: "—", dz: null };
+    let max = { a: "Sem dado", dz: null };
     const itens = DISEASES.map((dz) => {
       if (!ativa(dz)) return { dz, fora: true };
       const r = (MUN.risco[d] || {})[dz];
-      if (!r) return { dz, x: { a: "—", sub: "sem dado", c: "no" } };
+      if (!r) return { dz, x: { a: "Sem dado", sub: "", c: "no" } };
       const x = acao(r, tol(dz));
-      if (RANK[x.a] !== undefined && RANK[x.a] > RANK[max.a]) max = { a: x.a, dz };
+      if (RANK[x.a] !== undefined && RANK[x.a] > (RANK[max.a] || 0)) max = { a: x.a, dz: x.a === "Risco baixo" ? null : dz };
       return { dz, x };
     });
     return { d, max, itens };
