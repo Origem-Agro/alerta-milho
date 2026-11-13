@@ -38,9 +38,12 @@ input,select{width:100%;padding:11px 10px;font-size:16px;border:1px solid #b8c2b
 .dia{flex:0 0 auto;min-width:84px;border-radius:10px;padding:8px;text-align:center;border:2px solid transparent;scroll-snap-align:start;font-size:12px}
 .dia b{display:block;font-size:14px}
 .dia.sel{border-color:#1b1f1c}
-.r-alto{background:#c62828;color:#fff}
-.r-medio{background:#fbc02d;color:#1b1f1c}
-.r-baixo{background:#2e7d32;color:#fff}
+.n1{background:#1b5e20;color:#fff}
+.n2{background:#81c784;color:#1b1f1c}
+.n3{background:#fff176;color:#1b1f1c}
+.n4{background:#f9a825;color:#1b1f1c}
+.n5{background:#e57373;color:#1b1f1c}
+.n6{background:#b71c1c;color:#fff}
 .no{background:#eceff1;color:#4a5350}
 .off{background:#fff;color:#8a8f8c;border:1px dashed #c3cbc7}
 .lista{list-style:none;margin:0;padding:0}
@@ -53,6 +56,9 @@ input,select{width:100%;padding:11px 10px;font-size:16px;border:1px solid #b8c2b
 .wx div{background:#f3f6f4;border-radius:8px;padding:8px 4px;font-size:12px;color:var(--sub)}
 .wx b{display:block;color:var(--txt);font-size:16px}
 .legenda span{display:inline-block;border-radius:5px;padding:2px 8px;font-size:12px;margin:0 4px 4px 0}
+.matriz{width:100%;border-collapse:separate;border-spacing:3px;margin-bottom:8px;font-size:12px;text-align:center}
+.matriz th{font-weight:600;color:var(--sub);padding:4px}
+.matriz td{border-radius:5px;padding:7px 4px;font-weight:600}
 .notas{font-size:12px;color:#33403a;line-height:1.5;padding-left:18px;margin:0}
 </style>
 </head>
@@ -114,7 +120,13 @@ input,select{width:100%;padding:11px 10px;font-size:16px;border:1px solid #b8c2b
     <div id="resultado"></div>
     <div class="card">
       <h2>Como ler</h2>
-      <div class="legenda"><span class="r-alto">Risco alto</span><span class="r-medio">Risco médio</span><span class="r-baixo">Risco baixo</span><span class="no">Sem nota / sem dado</span><span class="off">Fora do estádio</span></div>
+      <table class="matriz"><thead><tr><th>Tolerância</th><th>Clima baixo</th><th>Clima médio</th><th>Clima alto</th></tr></thead><tbody>
+        <tr><th>T</th><td class="n1">Muito baixo</td><td class="n2">Baixo</td><td class="n3">Médio</td></tr>
+        <tr><th>MT</th><td class="n2">Baixo</td><td class="n3">Médio</td><td class="n4">Médio-alto</td></tr>
+        <tr><th>MS</th><td class="n3">Médio</td><td class="n4">Médio-alto</td><td class="n5">Alto</td></tr>
+        <tr><th>S</th><td class="n4">Médio-alto</td><td class="n5">Alto</td><td class="n6">Muito alto</td></tr>
+      </tbody></table>
+      <div class="legenda"><span class="no">Sem nota / sem dado</span><span class="off">Fora do estádio</span></div>
       <ul class="notas">
         <li>O risco de cada doença vem da previsão do tempo (Open-Meteo, 7 dias, atualizada todo dia de madrugada) e dos limiares de favorabilidade da proposta v2.</li>
         <li>A cor final cruza o risco do clima com a tolerância do híbrido na planilha de notas (T, MT, MS, S). Abaixo de cada cor aparece o risco do clima e a classe do híbrido.</li><li>Fora da janela de estádio (escala Embrapa), a doença não gera alerta.</li>
@@ -133,12 +145,13 @@ const SUPABASE_URL = "https://cvbgpfwfamnphvgadeou.supabase.co";
 const SUPABASE_KEY = "sb_publishable_F8EKP0xSjivCJZRo4DfpmQ_ngiqJKtS"; // chave pública; o acesso aos dados é controlado no banco
 const STAGES = ["VE","V1","V2","V3","V4","V5","V6","V7","V8","V9","VT","R1","R2","R3","R4","R5","R6"];
 const DISEASES = ["Mancha branca","Helmintosporiose","Bipolaris","Cercospora","Ferrugem polissora","Mancha de Diplodia","Antracnose de colmo","Fusariose de colmo","Estria bacteriana"];
-const RANK = {"Risco alto":3,"Risco médio":2,"Risco baixo":1};
+const NIVEIS = ["Risco muito baixo","Risco baixo","Risco médio","Risco médio-alto","Risco alto","Risco muito alto"];
+const RANK = Object.fromEntries(NIVEIS.map((n, i) => [n, i + 1]));
 const DIAS_SEM = ["dom","seg","ter","qua","qui","sex","sáb"];
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const cls = (a) => a==="Risco alto"?"r-alto":a==="Risco médio"?"r-medio":a==="Risco baixo"?"r-baixo":"no";
+const cls = (a) => RANK[a] ? "n" + RANK[a] : "no";
 const num = (v) => v == null ? null : Number(v);
 const semAcento = (s) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 const guardar = (k, v) => { try { localStorage.setItem("am_" + k, v); } catch (e) {} };
@@ -299,7 +312,7 @@ function render() {
       const r = (MUN.risco[d] || {})[dz];
       if (!r) return { dz, x: { a: "Sem dado", sub: "", c: "no" } };
       const x = acao(r, tol(dz));
-      if (RANK[x.a] !== undefined && RANK[x.a] > (RANK[max.a] || 0)) max = { a: x.a, dz: x.a === "Risco baixo" ? null : dz };
+      if (RANK[x.a] && RANK[x.a] > (RANK[max.a] || 0)) max = { a: x.a, dz: RANK[x.a] > 1 ? dz : null };
       return { dz, x };
     });
     return { d, max, itens };
