@@ -164,6 +164,13 @@ main{padding-bottom:calc(84px + env(safe-area-inset-bottom))}
 
    <div id="abaOcorr" class="hidden">
     <div class="card">
+      <h2>Perto de você</h2>
+      <label for="pRaio">Raio de busca</label>
+      <select id="pRaio"><option value="10">10 km</option><option value="25">25 km</option><option value="50" selected>50 km</option><option value="100">100 km</option></select>
+      <button class="btn2" id="pGps" type="button">📍 Ver ocorrências perto de mim</button>
+      <div id="pLista"><p class="sub" style="margin:8px 0 0">Toque no botão para usar a localização do celular.</p></div>
+    </div>
+    <div class="card">
       <h2>Registrar ocorrência</h2>
       <label for="oDz">Doença</label>
       <select id="oDz"></select>
@@ -459,11 +466,14 @@ function prepararOcorr() {
   fill($("oFiltro"), DISEASES.map((d) => ({ v: d, t: d })), "Todas");
   fill($("oSea"), [{ v: "Verão", t: "Safra (Verão)" }, { v: "Safrinha", t: "Safrinha" }], "Selecione a época");
   fill($("oStg"), STAGES.map((s) => ({ v: s, t: s })), "Selecione o estádio");
+  fillOHyb();
   copiarSelecao();
   $("oSea").addEventListener("change", fillOHyb);
   $("oDias").addEventListener("change", carregarOcorr);
-  $("oFiltro").addEventListener("change", desenharOcorr);
+  $("oFiltro").addEventListener("change", () => { desenharOcorr(); desenharPerto(); });
   $("oGps").addEventListener("click", pegarGps);
+  $("pGps").addEventListener("click", pertoDeMim);
+  $("pRaio").addEventListener("change", () => (aqui ? desenharPerto() : pertoDeMim()));
   $("oSalvar").addEventListener("click", salvarOcorr);
 }
 
@@ -518,7 +528,49 @@ async function carregarOcorr() {
   if (error) { $("oLista").innerHTML = '<div class="msg err">' + esc(traduz(error)) + '</div>'; return; }
   OCORR = data || [];
   desenharOcorr();
+  desenharPerto();
   if (!$("abaAlertas").classList.contains("hidden")) render();
+}
+
+// ---------- Perto de você ----------
+let aqui = null;
+function distKm(a, b, c, d) {
+  const R = 6371, r = Math.PI / 180;
+  const dLat = (c - a) * r, dLon = (d - b) * r;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a * r) * Math.cos(c * r) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+function pertoDeMim() {
+  if (!("geolocation" in navigator)) { $("pLista").innerHTML = '<p class="sub">Este aparelho não informa a localização.</p>'; return; }
+  $("pLista").innerHTML = '<p class="sub" style="margin:8px 0 0">Buscando sua localização…</p>';
+  navigator.geolocation.getCurrentPosition((pos) => {
+    aqui = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+    desenharPerto();
+  }, (err) => {
+    aqui = null;
+    $("pLista").innerHTML = '<div class="msg err">' + (err.code === 1
+      ? "O acesso à localização foi negado. Libere a localização para este app nas configurações do navegador ou do celular."
+      : "Não foi possível obter a localização. Verifique se o GPS está ligado e tente de novo.") + '</div>';
+  }, { enableHighAccuracy: false, timeout: 20000, maximumAge: 300000 });
+}
+function desenharPerto() {
+  if (!aqui || !OCORR) return;
+  const raio = +$("pRaio").value;
+  const f = $("oFiltro").value;
+  const periodo = $("oDias").options[$("oDias").selectedIndex].textContent.toLowerCase();
+  const lista = OCORR.filter((o) => !f || o.doenca === f)
+    .map((o) => ({ o, d: distKm(aqui.lat, aqui.lon, num(o.lat), num(o.lon)) }))
+    .filter((x) => x.d <= raio).sort((a, b) => a.d - b.d);
+  const resumo = {};
+  lista.forEach((x) => { resumo[x.o.doenca] = (resumo[x.o.doenca] || 0) + 1; });
+  const txtResumo = Object.entries(resumo).sort((a, b) => b[1] - a[1]).map(([dz, n]) => dz + " (" + n + ")").join(", ");
+  let h = '<p class="sub" style="margin:10px 0 4px">' + (lista.length
+    ? '<b>' + lista.length + ' ocorrência' + (lista.length > 1 ? 's' : '') + '</b> num raio de ' + raio + ' km, ' + esc(periodo) + ': ' + esc(txtResumo) + '.'
+    : 'Nenhuma ocorrência num raio de ' + raio + ' km, ' + esc(periodo) + '.') + '</p>';
+  h += lista.slice(0, 20).map((x) => '<div class="oc"><span class="dot ' + SEV_CLS[x.o.severidade] + '"></span><div class="tx">' + textoOcorr(x.o) +
+    '<small>a cerca de ' + (x.d < 2 ? "1–2" : Math.round(x.d)) + ' km de você</small></div></div>').join("");
+  if (lista.length > 20) h += '<p class="sub">E mais ' + (lista.length - 20) + ' no mapa abaixo.</p>';
+  $("pLista").innerHTML = h;
 }
 
 function iniciarMapa() {
