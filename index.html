@@ -788,7 +788,7 @@ function listaGuia() {
   let h = '<h2>Guia de doenças</h2><p class="sub" style="margin:0 0 6px">Fotos, sintomas, condições favoráveis e controle de cada doença.</p>';
   GUIA.forEach((g) => {
     const f = g.imagens[0] && FOTOS[g.imagens[0].caminho];
-    h += '<div class="gcard" data-slug="' + esc(g.slug) + '" role="button" tabindex="0"><div class="th"' + (f ? ' style="background-image:url(\'' + f + '\')"' : '') + '>' + (f ? '' : '🌽') + '</div>' +
+    h += '<div class="gcard" data-slug="' + esc(g.slug) + '" role="button" tabindex="0"><div class="th"' + (f ? ' style="background-image:url(\'' + f + '\')"' : '') + '>' + (f ? '' : '<svg viewBox="0 0 512 512" width="40" height="40" aria-hidden="true"><path d="M256 404 C192 404 146 340 150 226 C190 276 212 326 240 362 Z" fill="#2F4A12"/><path d="M256 404 C320 404 366 340 362 226 C322 276 300 326 272 362 Z" fill="#2F4A12"/><path d="M256 110 C300 110 318 180 318 270 C318 340 292 372 256 380 C220 372 194 340 194 270 C194 180 212 110 256 110 Z" fill="#C4621A"/><g fill="#F28C1E"><circle cx="226" cy="170" r="16"/><circle cx="286" cy="170" r="16"/><circle cx="256" cy="230" r="16"/><circle cx="226" cy="290" r="16"/><circle cx="286" cy="290" r="16"/><circle cx="256" cy="340" r="16"/></g></svg>') + '</div>' +
       '<div class="tx"><b>' + esc(g.titulo) + '</b>' + (g.monitorada ? '' : '<span class="badge">fora do alerta</span>') + '<small>' + esc(g.agente) + '</small></div></div>';
   });
   $("guiaConteudo").innerHTML = h;
