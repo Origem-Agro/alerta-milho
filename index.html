@@ -467,7 +467,7 @@ function render() {
     const jan = BASE.win[it.dz];
     const sub = jan ? "janela " + STAGES[jan[0]] + "–" + STAGES[jan[1]] : "todos os estádios";
     if (it.fora) html += '<li><span class="nome">' + esc(it.dz) + '<small>' + sub + '</small></span><span class="tag off">Fora do estádio</span></li>';
-    else html += '<li><span class="nome"><button class="dzlink" data-dz="' + esc(it.dz) + '">' + esc(it.dz) + '</button><small>' + sub + '</small>' + (temManejo(it.dz) ? '<button class="mlink" data-manejo="' + esc(it.dz) + '">Ver manejo (ensaios) ›</button>' : '') + '</span><span class="tag ' + it.x.c + '">' + esc(it.x.a) + '<small>' + esc(it.x.sub) + '</small></span></li>';
+    else html += '<li><span class="nome"><button class="dzlink" data-dz="' + esc(it.dz) + '">' + esc(it.dz) + '</button><small>' + sub + '</small>' + (temManejo(it.dz) ? '<button class="mlink" data-manejo="' + esc(it.dz) + '">Ver manejo' + ((tol(it.dz) || [])[4] ? ' para híbrido ' + tol(it.dz)[4] : '') + ' ›</button>' : '') + '</span><span class="tag ' + it.x.c + '">' + esc(it.x.a) + '<small>' + esc(it.x.sub) + '</small></span></li>';
   });
   html += '</ul></div>';
   const elev = num(w.elevacao_m);
@@ -881,13 +881,14 @@ function abrirManejo(dz, origem) {
   const h = $("hyb").value, sea = $("sea").value, s = $("stg").value;
   const t = BASE.tol.find((x) => x[0] === h && x[1] === sea && x[2] === dz);
   const classeHib = t && t[4];
+  const notaHib = t && t[3];
   const disp = [...new Set(ens.map((e) => e.classe))].sort((a, b) => CLASSES.indexOf(a) - CLASSES.indexOf(b));
   let escolha = disp[disp.length - 1];
   if (classeHib) {
     const alvo = CLASSES.indexOf(classeHib);
     escolha = disp.slice().sort((a, b) => (Math.abs(CLASSES.indexOf(a) - alvo) - Math.abs(CLASSES.indexOf(b) - alvo)) || (CLASSES.indexOf(b) - CLASSES.indexOf(a)))[0];
   }
-  manejoCtx = { dz, h, sea, si: s === "" ? null : +s, classeHib, classe: escolha, todos: false, origem: origem || "alertas" };
+  manejoCtx = { dz, h, sea, si: s === "" ? null : +s, classeHib, notaHib, classe: escolha, todos: false, comparar: !classeHib, origem: origem || "alertas" };
   mostrarAba("manejo");
   desenharManejo();
 }
@@ -913,10 +914,19 @@ function desenharManejo() {
 
   let html = '<button class="voltar" type="button" id="mVoltar">‹ ' + (c.origem === "guia" ? "Voltar ao guia" : "Voltar ao alerta") + '</button>';
   html += '<h2 style="margin-bottom:2px">Manejo · ' + esc(c.dz) + '</h2>';
-  html += '<p class="sub" style="margin:0 0 10px">' + (c.h ? esc(c.h) + (c.classeHib ? ' (' + c.classeHib + ' para ' + esc(c.dz) + ')' : ' (sem nota para ' + esc(c.dz) + ')') : 'Nenhum híbrido selecionado') + (c.si != null ? ' · estádio ' + STAGES[c.si] : '') + '</p>';
-  html += '<div class="chips">' + ens.map((x) => '<button type="button" data-cl="' + x.classe + '" class="' + (x.classe === e.classe ? 'sel' : '') + '">Ensaio híbrido ' + x.classe + '</button>').join('') + '</div>';
-  if (c.classeHib && c.classeHib !== e.classe && c.classe === e.classe && !c.trocou)
-    html += '<p class="sub" style="margin:-4px 0 10px">Não há ensaio com híbrido ' + c.classeHib + '. Mostrando o ensaio ' + e.classe + ', a classe mais próxima.</p>';
+  // Classificação do híbrido selecionado define o ensaio exibido
+  let cab;
+  if (!c.h) cab = 'Nenhum híbrido selecionado. Escolha época e híbrido na aba Alertas para ver o resultado da classe dele.';
+  else if (!c.classeHib) cab = '<b>' + esc(c.h) + '</b> não tem nota de tolerância a ' + esc(c.dz) + ' na planilha (' + esc(c.sea) + '). Escolha abaixo qual ensaio ver.';
+  else {
+    cab = '<b>' + esc(c.h) + '</b> é <b>' + c.classeHib + '</b> (' + CLASSE_NOME[c.classeHib] + ') para ' + esc(c.dz) + (c.notaHib != null ? ', nota ' + c.notaHib : '') + ' (' + esc(c.sea) + '). ';
+    if (e.classe === c.classeHib) cab += 'Resultados do ensaio com híbrido ' + e.classe + '.';
+    else if (!c.trocou) cab += 'Ainda não há ensaio com híbrido ' + c.classeHib + '; mostrando o da classe mais próxima (' + e.classe + ').';
+    else cab += 'Você está vendo o ensaio com híbrido ' + e.classe + ', para comparação.';
+  }
+  html += '<div class="nota" style="margin:0 0 12px;background:#e7f4ec">' + cab + (c.si != null ? ' Estádio ' + STAGES[c.si] + '.' : '') +
+    (c.sea && e.epoca !== c.sea ? ' Atenção: o ensaio é de ' + esc(e.epoca.toLowerCase()) + '.' : '') + '</div>';
+  if (c.comparar) html += '<div class="chips">' + ens.map((x) => '<button type="button" data-cl="' + x.classe + '" class="' + (x.classe === e.classe ? 'sel' : '') + '">Ensaio híbrido ' + x.classe + (x.classe === c.classeHib ? ' (seu híbrido)' : '') + '</button>').join('') + '</div>';
   html += '<label for="mPreco">Preço da saca (R$)</label><input id="mPreco" type="number" inputmode="decimal" min="1" step="1" value="' + preco + '" style="margin-bottom:6px">';
   html += '<h3 style="font-size:14px;margin:14px 0 4px;color:var(--verde)">Retorno médio por momento de aplicação</h3><p class="sub" style="margin:0 0 4px;font-size:12px">sc/ha, já descontado o custo do tratamento</p>';
   gs.forEach((g) => {
@@ -932,6 +942,7 @@ function desenharManejo() {
       '<div class="vl ' + (l.liq >= 0 ? 'pos' : 'neg') + '">' + fmt1(l.liq) + '<small>sc/ha líquido</small></div></div>';
   });
   if (linhas.length > 5) html += '<button class="btn2" id="mTodos" type="button" style="margin-top:10px">' + (c.todos ? 'Mostrar só os 5 melhores' : 'Ver todos os ' + linhas.length + ' tratamentos') + '</button>';
+  if (!c.comparar && ens.length > 1) html += '<button class="btn2" id="mComparar" type="button" style="margin-top:10px">Comparar com ensaio de outra classe</button>';
   html += '<div class="nota"><b>De onde vem:</b> ensaio ' + esc(e.codigo) + ', ' + esc(e.local) + ', ' + esc(e.epoca.toLowerCase()) + ' ' + e.safra + ', híbrido ' + esc(e.hibrido) + ' (' + CLASSE_NOME[e.classe] + ' a ' + esc(e.doenca) + '). ' +
     'Testemunha sem fungicida: ' + Math.round(ty * 1000 / 60) + ' sc/ha, severidade de ' + Math.round(num(e.testemunha_sev_r2)) + '% em R2. ' +
     'Retorno = ganho sobre a testemunha (sacas de 60 kg) menos o custo do tratamento ao preço informado. ' +
@@ -942,6 +953,7 @@ function desenharManejo() {
   $("manejoConteudo").querySelectorAll(".chips button").forEach((b) => b.addEventListener("click", () => { c.classe = b.dataset.cl; c.trocou = true; desenharManejo(); }));
   $("mPreco").addEventListener("change", () => { const v = +$("mPreco").value; if (v > 0) { guardar("preco", String(v)); desenharManejo(); } });
   const mt = $("mTodos"); if (mt) mt.addEventListener("click", () => { c.todos = !c.todos; desenharManejo(); });
+  const mc = $("mComparar"); if (mc) mc.addEventListener("click", () => { c.comparar = true; desenharManejo(); window.scrollTo(0, 0); });
 }
 </script>
 </body>
