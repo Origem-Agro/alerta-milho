@@ -104,6 +104,22 @@ main{padding-bottom:calc(84px + env(safe-area-inset-bottom))}
 .heat td{width:26px;height:18px;border-radius:2px}
 .heat th{font-weight:400;color:var(--sub);padding:0 3px}
 .h0{background:#2e9e4f}.h1{background:#f2e300}.h2{background:#e02424}
+.mlink{background:none;border:0;padding:2px 0 0;font-size:12px;color:var(--verde);font-weight:600;display:block;cursor:pointer}
+.mbar{display:flex;align-items:center;gap:8px;margin:6px 0;font-size:13px}
+.mbar .nm{width:104px}
+.mbar .tr{flex:1;height:14px;background:#eef1ef;border-radius:3px;position:relative;overflow:hidden}
+.mbar .fl{position:absolute;left:0;top:0;bottom:0;border-radius:3px}
+.mbar .vl{width:52px;text-align:right;font-weight:700}
+.pos{color:#1b5e20}.neg{color:#b71c1c}
+.fpos{background:#43a047}.fneg{background:#e53935}
+.passou{opacity:.45}
+.mtr{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--borda);font-size:14px}
+.mtr small{display:block;color:var(--sub);font-size:12px;margin-top:2px}
+.mtr .vl{font-weight:700;white-space:nowrap;text-align:right}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.chips button{border:1px solid #b8c2bd;background:#fff;border-radius:16px;padding:6px 12px;font-size:13px;color:var(--txt)}
+.chips button.sel{border-color:var(--verde);background:#e7f4ec;color:var(--verde);font-weight:600}
+.nota{background:#f3f6f4;border-radius:8px;padding:10px 12px;font-size:12px;color:#33403a;line-height:1.5;margin-top:12px}
 .dzlink{background:none;border:0;padding:0;font:inherit;color:inherit;text-align:left;text-decoration:underline dotted;text-underline-offset:3px;cursor:pointer}
 </style>
 </head>
@@ -233,6 +249,10 @@ main{padding-bottom:calc(84px + env(safe-area-inset-bottom))}
     </div>
    </div>
 
+   <div id="abaManejo" class="hidden">
+    <div class="card" id="manejoConteudo"></div>
+   </div>
+
    <div id="abaGuia" class="hidden">
     <div class="card" id="guiaConteudo"><p class="sub">Carregando…</p></div>
    </div>
@@ -359,6 +379,7 @@ async function entrarNoApp() {
   fillHyb(); $("hyb").value = ler("hyb");
   if ($("loc").value) loadMun(); else render();
   prepararOcorr();
+  carregarManejo();
   const abaUrl = new URLSearchParams(location.search).get("aba");
   const abaIni = abaUrl || ler("aba");
   mostrarAba(["ocorr", "guia"].includes(abaIni) ? abaIni : "alertas");
@@ -446,7 +467,7 @@ function render() {
     const jan = BASE.win[it.dz];
     const sub = jan ? "janela " + STAGES[jan[0]] + "–" + STAGES[jan[1]] : "todos os estádios";
     if (it.fora) html += '<li><span class="nome">' + esc(it.dz) + '<small>' + sub + '</small></span><span class="tag off">Fora do estádio</span></li>';
-    else html += '<li><span class="nome"><button class="dzlink" data-dz="' + esc(it.dz) + '">' + esc(it.dz) + '</button><small>' + sub + '</small></span><span class="tag ' + it.x.c + '">' + esc(it.x.a) + '<small>' + esc(it.x.sub) + '</small></span></li>';
+    else html += '<li><span class="nome"><button class="dzlink" data-dz="' + esc(it.dz) + '">' + esc(it.dz) + '</button><small>' + sub + '</small>' + (temManejo(it.dz) ? '<button class="mlink" data-manejo="' + esc(it.dz) + '">Ver manejo (ensaios) ›</button>' : '') + '</span><span class="tag ' + it.x.c + '">' + esc(it.x.a) + '<small>' + esc(it.x.sub) + '</small></span></li>';
   });
   html += '</ul></div>';
   const elev = num(w.elevacao_m);
@@ -462,6 +483,7 @@ function render() {
   out.innerHTML = html;
   const vm = $("verMapa"); if (vm) vm.addEventListener("click", () => mostrarAba("ocorr"));
   out.querySelectorAll(".dzlink").forEach((bt) => bt.addEventListener("click", () => abrirGuiaPorDoenca(bt.dataset.dz)));
+  out.querySelectorAll(".mlink").forEach((bt) => bt.addEventListener("click", () => abrirManejo(bt.dataset.manejo)));
   out.querySelectorAll(".dia").forEach((el) => {
     const go = () => { diaSel = +el.dataset.i; render(); };
     el.addEventListener("click", go);
@@ -479,11 +501,12 @@ function mostrarAba(a) {
   $("abaAlertas").classList.toggle("hidden", a !== "alertas");
   $("abaOcorr").classList.toggle("hidden", a !== "ocorr");
   $("abaGuia").classList.toggle("hidden", a !== "guia");
+  $("abaManejo").classList.toggle("hidden", a !== "manejo");
   $("tabAlertas").classList.toggle("ativa", a === "alertas");
   $("tabOcorr").classList.toggle("ativa", a === "ocorr");
   $("tabGuia").classList.toggle("ativa", a === "guia");
   if (a === "guia") carregarGuia();
-  guardar("aba", a);
+  if (a !== "manejo") guardar("aba", a);
   window.scrollTo(0, 0);
   if (a === "ocorr") { if (ocorrPronto) copiarSelecao(); iniciarMapa(); setTimeout(() => { if (mapa) mapa.invalidateSize(); desenharOcorr(); }, 50); }
 }
@@ -825,9 +848,11 @@ function abrirGuia(slug) {
   h += lista('Sobrevivência e hospedeiros', g.sobrevivencia);
   h += lista('Controle', g.controle);
   h += lista('Como diferenciar', g.diferenciar);
+  if (g.doenca && temManejo(g.doenca)) h += '<button class="btn2" id="guiaManejo" type="button" style="margin-top:12px">Ver resultados de controle (ensaios)</button>';
   h += '<p class="sub" style="margin:14px 0 0;font-size:12px">' + esc(g.fonte) + (g.creditos ? ' · ' + esc(g.creditos) : '') + '. Uso interno.</p>';
   $("guiaConteudo").innerHTML = h;
   $("guiaConteudo").querySelector(".voltar").addEventListener("click", () => { listaGuia(); window.scrollTo(0, 0); });
+  const gm = $("guiaManejo"); if (gm) gm.addEventListener("click", () => abrirManejo(g.doenca, "guia"));
   window.scrollTo(0, 0);
 }
 
@@ -836,6 +861,87 @@ async function abrirGuiaPorDoenca(doenca) {
   await carregarGuia();
   const g = (GUIA || []).find((x) => x.doenca === doenca);
   if (g) abrirGuia(g.slug); else listaGuia();
+}
+// ---------- Manejo (ensaios de controle) ----------
+let MANEJO = [], manejoCtx = null;
+const CLASSES = ["T", "MT", "MS", "S"];
+const CLASSE_NOME = { T: "tolerante", MT: "moderadamente tolerante", MS: "moderadamente suscetível", S: "suscetível" };
+async function carregarManejo() {
+  const { data } = await sb.rpc("alerta_milho_manejo");
+  MANEJO = data || [];
+  if (!$("abaAlertas").classList.contains("hidden")) render();
+}
+const temManejo = (dz) => MANEJO.some((e) => e.doenca === dz);
+const fmt1 = (x) => (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(1).replace(".", ",");
+const rotuloMomento = (est) => est.length === 1 ? "Só " + est[0] : est.join(" + ");
+
+function abrirManejo(dz, origem) {
+  const ens = MANEJO.filter((e) => e.doenca === dz);
+  if (!ens.length) return;
+  const h = $("hyb").value, sea = $("sea").value, s = $("stg").value;
+  const t = BASE.tol.find((x) => x[0] === h && x[1] === sea && x[2] === dz);
+  const classeHib = t && t[4];
+  const disp = [...new Set(ens.map((e) => e.classe))].sort((a, b) => CLASSES.indexOf(a) - CLASSES.indexOf(b));
+  let escolha = disp[disp.length - 1];
+  if (classeHib) {
+    const alvo = CLASSES.indexOf(classeHib);
+    escolha = disp.slice().sort((a, b) => (Math.abs(CLASSES.indexOf(a) - alvo) - Math.abs(CLASSES.indexOf(b) - alvo)) || (CLASSES.indexOf(b) - CLASSES.indexOf(a)))[0];
+  }
+  manejoCtx = { dz, h, sea, si: s === "" ? null : +s, classeHib, classe: escolha, todos: false, origem: origem || "alertas" };
+  mostrarAba("manejo");
+  desenharManejo();
+}
+
+function desenharManejo() {
+  const c = manejoCtx; if (!c) return;
+  const ens = MANEJO.filter((e) => e.doenca === c.dz);
+  const e = ens.find((x) => x.classe === c.classe) || ens[0];
+  let preco = +(ler("preco") || 60); if (!(preco > 0)) preco = 60;
+  const ty = num(e.testemunha_yield_tha);
+  const linhas = e.tratamentos.map((tr) => {
+    const ganho = (num(tr.yield_tha) - ty) * 1000 / 60;
+    const custo = num(tr.custo_rs_ha) / preco;
+    const passou = c.si != null && STAGES.indexOf(tr.estadios[0]) < c.si;
+    return { ...tr, ganho, custo, liq: ganho - custo, passou, momento: rotuloMomento(tr.estadios) };
+  }).sort((a, b) => b.liq - a.liq);
+  const grupos = {};
+  linhas.forEach((l) => { (grupos[l.momento] = grupos[l.momento] || []).push(l); });
+  const gs = Object.entries(grupos).map(([m, ls]) => ({ m, liq: ls.reduce((a, l) => a + l.liq, 0) / ls.length, n: ls.length, passou: ls.every((l) => l.passou) }))
+    .sort((a, b) => b.liq - a.liq);
+  const pagaram = linhas.filter((l) => l.liq > 0).length;
+  const escala = Math.max(5, ...gs.map((g) => Math.abs(g.liq)));
+
+  let html = '<button class="voltar" type="button" id="mVoltar">‹ ' + (c.origem === "guia" ? "Voltar ao guia" : "Voltar ao alerta") + '</button>';
+  html += '<h2 style="margin-bottom:2px">Manejo · ' + esc(c.dz) + '</h2>';
+  html += '<p class="sub" style="margin:0 0 10px">' + (c.h ? esc(c.h) + (c.classeHib ? ' (' + c.classeHib + ' para ' + esc(c.dz) + ')' : ' (sem nota para ' + esc(c.dz) + ')') : 'Nenhum híbrido selecionado') + (c.si != null ? ' · estádio ' + STAGES[c.si] : '') + '</p>';
+  html += '<div class="chips">' + ens.map((x) => '<button type="button" data-cl="' + x.classe + '" class="' + (x.classe === e.classe ? 'sel' : '') + '">Ensaio híbrido ' + x.classe + '</button>').join('') + '</div>';
+  if (c.classeHib && c.classeHib !== e.classe && c.classe === e.classe && !c.trocou)
+    html += '<p class="sub" style="margin:-4px 0 10px">Não há ensaio com híbrido ' + c.classeHib + '. Mostrando o ensaio ' + e.classe + ', a classe mais próxima.</p>';
+  html += '<label for="mPreco">Preço da saca (R$)</label><input id="mPreco" type="number" inputmode="decimal" min="1" step="1" value="' + preco + '" style="margin-bottom:6px">';
+  html += '<h3 style="font-size:14px;margin:14px 0 4px;color:var(--verde)">Retorno médio por momento de aplicação</h3><p class="sub" style="margin:0 0 4px;font-size:12px">sc/ha, já descontado o custo do tratamento</p>';
+  gs.forEach((g) => {
+    const w = Math.min(100, Math.abs(g.liq) / escala * 100);
+    html += '<div class="mbar' + (g.passou ? ' passou' : '') + '"><span class="nm">' + esc(g.m) + '<small style="display:block;font-size:11px;color:var(--sub)">' + g.n + ' trat.' + (g.passou ? ' · já passou' : '') + '</small></span><div class="tr"><div class="fl ' + (g.liq >= 0 ? 'fpos' : 'fneg') + '" style="width:' + w + '%"></div></div><span class="vl ' + (g.liq >= 0 ? 'pos' : 'neg') + '">' + fmt1(g.liq) + '</span></div>';
+  });
+  html += '<h3 style="font-size:14px;margin:16px 0 2px;color:var(--verde)">Tratamentos (' + pagaram + ' de ' + linhas.length + ' se pagaram)</h3>';
+  const mostrar = c.todos ? linhas : linhas.slice(0, 5);
+  mostrar.forEach((l) => {
+    html += '<div class="mtr' + (l.passou ? ' passou' : '') + '"><div>' + esc(l.nome) +
+      '<small>Ganho ' + fmt1(l.ganho) + ' sc/ha · custo ' + l.custo.toFixed(1).replace(".", ",") + ' sc/ha (R$ ' + Math.round(num(l.custo_rs_ha)) + '/ha)</small>' +
+      '<small>Severidade R2: ' + Math.round(num(l.sev_r2)) + '% · eficiência ' + Math.round(num(l.eficiencia)) + '%' + (l.passou ? ' · momento já passou' : '') + '</small></div>' +
+      '<div class="vl ' + (l.liq >= 0 ? 'pos' : 'neg') + '">' + fmt1(l.liq) + '<small>sc/ha líquido</small></div></div>';
+  });
+  if (linhas.length > 5) html += '<button class="btn2" id="mTodos" type="button" style="margin-top:10px">' + (c.todos ? 'Mostrar só os 5 melhores' : 'Ver todos os ' + linhas.length + ' tratamentos') + '</button>';
+  html += '<div class="nota"><b>De onde vem:</b> ensaio ' + esc(e.codigo) + ', ' + esc(e.local) + ', ' + esc(e.epoca.toLowerCase()) + ' ' + e.safra + ', híbrido ' + esc(e.hibrido) + ' (' + CLASSE_NOME[e.classe] + ' a ' + esc(e.doenca) + '). ' +
+    'Testemunha sem fungicida: ' + Math.round(ty * 1000 / 60) + ' sc/ha, severidade de ' + Math.round(num(e.testemunha_sev_r2)) + '% em R2. ' +
+    'Retorno = ganho sobre a testemunha (sacas de 60 kg) menos o custo do tratamento ao preço informado. ' +
+    (e.com_estatistica ? '' : '<b>Resultado de um único ensaio, sem análise estatística: indica tendência, não é recomendação.</b> ') +
+    (c.si != null ? 'Programas que começam antes do estádio ' + STAGES[c.si] + ' aparecem esmaecidos.' : '') + '</div>';
+  $("manejoConteudo").innerHTML = html;
+  $("mVoltar").addEventListener("click", () => { mostrarAba(c.origem); });
+  $("manejoConteudo").querySelectorAll(".chips button").forEach((b) => b.addEventListener("click", () => { c.classe = b.dataset.cl; c.trocou = true; desenharManejo(); }));
+  $("mPreco").addEventListener("change", () => { const v = +$("mPreco").value; if (v > 0) { guardar("preco", String(v)); desenharManejo(); } });
+  const mt = $("mTodos"); if (mt) mt.addEventListener("click", () => { c.todos = !c.todos; desenharManejo(); });
 }
 </script>
 </body>
