@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<link rel="stylesheet" href="vendor/leaflet-1.9.4/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H">
 <title>Alerta de Doenças do Milho</title>
 <style>
 :root{color-scheme:light;--verde:#1e5e3a;--fundo:#eef2ef;--txt:#1b1f1c;--sub:#4a5350;--borda:#d5ddd9}
@@ -31,6 +31,7 @@ input,select{width:100%;padding:11px 10px;font-size:16px;border:1px solid #b8c2b
 .btn:disabled{opacity:.6}
 .link{background:none;border:0;color:var(--verde);text-decoration:underline;font-size:14px;margin-top:12px;padding:4px 0}
 .sub{color:var(--sub);font-size:13px}
+.sub.velha{color:#7a1212;font-weight:600}
 .msg{padding:10px 12px;border-radius:8px;font-size:14px;margin-top:12px}
 .msg.err{background:#fdecec;color:#7a1212}
 .msg.ok{background:#e7f4ec;color:#1e5e3a}
@@ -247,8 +248,8 @@ main{padding-bottom:calc(84px + env(safe-area-inset-bottom))}
   <section id="telaCarregando" class="card"><p class="sub">Carregando…</p></section>
 </main>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="vendor/supabase-js-2.119.2/supabase.js" integrity="sha384-A97u3Qnt9GZHURO9YJZRe7VQgGUeFzcv6I1oIGnUTxQrCxnpQMwR0/G8F2zt9abZ"></script>
+<script src="vendor/leaflet-1.9.4/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH"></script>
 <script>
 const SUPABASE_URL = "https://cvbgpfwfamnphvgadeou.supabase.co";
 const SUPABASE_KEY = "sb_publishable_F8EKP0xSjivCJZRo4DfpmQ_ngiqJKtS"; // chave pública; o acesso aos dados é controlado no banco
@@ -350,7 +351,10 @@ async function entrarNoApp() {
   BASE.mat = {}; (data.matriz || []).forEach(([r, c, a]) => { (BASE.mat[r] = BASE.mat[r] || {})[c] = a; });
   BASE.win = {}; (data.janelas || []).forEach(([dz, a, b]) => { BASE.win[dz] = a && b ? [STAGES.indexOf(a), STAGES.indexOf(b)] : null; });
   const ex = data.exec;
+  const horasDesdeColeta = ex ? (Date.now() - new Date(ex.terminado_em).getTime()) / 36e5 : Infinity;
   $("fresh").textContent = ex ? "Previsão atualizada em " + new Date(ex.terminado_em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" }) : "Ainda não há previsão coletada.";
+  if (ex && horasDesdeColeta > 30) $("fresh").textContent += ". Atenção: a previsão está desatualizada e os alertas podem não refletir o tempo atual.";
+  $("fresh").classList.toggle("velha", horasDesdeColeta > 30);
   mostrar("telaApp");
   // Seleções anteriores
   fill($("sea"), [{ v: "Verão", t: "Safra (Verão)" }, { v: "Safrinha", t: "Safrinha" }], "Selecione a época"); $("sea").value = ler("sea");
