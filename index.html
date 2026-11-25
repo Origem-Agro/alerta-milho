@@ -765,28 +765,53 @@ function atualizarLocalAviso(lat, lon) {
   if (inscricao) sb.rpc("alerta_milho_atualizar_local_push", { p_endpoint: inscricao.endpoint, p_latitude: lat, p_longitude: lon }).then(() => {}, () => {});
 }
 // ---------- Guia de doenças ----------
-let GUIA = null, FOTOS = {}, guiaCarregando = null;
+let GUIA = null, FOTOS = {}, fotosAssinadasEm = 0, guiaCarregando = null;
 const HEAT_T = [40, 35, 30, 25, 20, 15, 10], HEAT_UR = [60, 65, 70, 75, 80, 85, 90, 95, 100];
+// Os links das fotos valem 6 h; o app pede links novos depois de 5 h (o app pode ficar dias aberto em segundo plano).
+const VALIDADE_FOTOS_S = 6 * 3600, RENOVAR_FOTOS_MS = 5 * 3600 * 1000;
+const fotosVencendo = () => Date.now() - fotosAssinadasEm > RENOVAR_FOTOS_MS;
+
+async function assinarFotos() {
+  const caminhos = GUIA.flatMap((g) => g.imagens.map((i) => i.caminho));
+  if (!caminhos.length) { fotosAssinadasEm = Date.now(); return; }
+  const { data: urls, error } = await sb.storage.from("alerta-milho-guia").createSignedUrls(caminhos, VALIDADE_FOTOS_S);
+  if (error || !urls) { fotosAssinadasEm = Date.now() - RENOVAR_FOTOS_MS + 60000; return; } // sem rede: tenta de novo em 1 min, mantém os links atuais
+  const novas = {};
+  urls.forEach((u) => { if (u.signedUrl && !u.error) novas[u.path] = u.signedUrl; });
+  FOTOS = novas;
+  fotosAssinadasEm = Date.now();
+}
+
+function redesenharGuia() {
+  if ($("abaGuia").classList.contains("hidden")) return;
+  const slug = $("guiaConteudo").dataset.slug;
+  if (slug) abrirGuia(slug); else listaGuia();
+}
 
 function carregarGuia() {
-  if (GUIA) return Promise.resolve(GUIA);
+  if (GUIA && !fotosVencendo()) return Promise.resolve(GUIA);
   if (guiaCarregando) return guiaCarregando;
   guiaCarregando = (async () => {
-    const { data, error } = await sb.rpc("alerta_milho_guia");
-    if (error || !data) { $("guiaConteudo").innerHTML = '<div class="msg err">' + esc(error ? traduz(error) : "Sem acesso ao guia.") + '</div>'; guiaCarregando = null; return null; }
-    GUIA = data;
-    const caminhos = GUIA.flatMap((g) => g.imagens.map((i) => i.caminho));
-    if (caminhos.length) {
-      const { data: urls } = await sb.storage.from("alerta-milho-guia").createSignedUrls(caminhos, 6 * 3600);
-      (urls || []).forEach((u) => { if (u.signedUrl && !u.error) FOTOS[u.path] = u.signedUrl; });
+    if (!GUIA) {
+      const { data, error } = await sb.rpc("alerta_milho_guia");
+      if (error || !data) { $("guiaConteudo").innerHTML = '<div class="msg err">' + esc(error ? traduz(error) : "Sem acesso ao guia.") + '</div>'; guiaCarregando = null; return null; }
+      GUIA = data;
     }
-    if (!$("abaGuia").classList.contains("hidden") && !$("guiaConteudo").dataset.slug) listaGuia();
+    await assinarFotos();
+    guiaCarregando = null;
+    redesenharGuia();
     return GUIA;
   })();
   return guiaCarregando;
 }
 
+// Ao voltar para o app (depois de horas em segundo plano), renova as fotos se o guia estiver aberto.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && GUIA && fotosVencendo() && !$("abaGuia").classList.contains("hidden")) carregarGuia();
+});
+
 function listaGuia() {
+  if (GUIA && fotosVencendo()) carregarGuia();
   $("guiaConteudo").dataset.slug = "";
   if (!GUIA) { $("guiaConteudo").innerHTML = '<p class="sub">Carregando…</p>'; carregarGuia(); return; }
   let h = '<h2>Guia de doenças</h2><p class="sub" style="margin:0 0 6px">Fotos, sintomas, condições favoráveis e controle de cada doença.</p>';
@@ -812,6 +837,7 @@ function heatmapHtml(m) {
 function abrirGuia(slug) {
   const g = (GUIA || []).find((x) => x.slug === slug);
   if (!g) return;
+  if (fotosVencendo()) carregarGuia();
   $("guiaConteudo").dataset.slug = slug;
   const lista = (titulo, itens) => itens && itens.length ? '<div class="sec"><h3>' + titulo + '</h3><ul>' + itens.map((i) => '<li>' + esc(i) + '</li>').join('') + '</ul></div>' : '';
   const jan = BASE && BASE.win[g.doenca];

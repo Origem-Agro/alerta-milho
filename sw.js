@@ -1,6 +1,6 @@
 // Service worker: guarda só os arquivos do app (para abrir rápido e funcionar como app instalado).
 // Os dados do Supabase nunca são guardados aqui; vêm sempre da rede.
-const VERSAO = "alerta-milho-v11";
+const VERSAO = "alerta-milho-v12";
 const ARQUIVOS = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png", "./apple-touch-icon.png",
   "./vendor/supabase-js-2.119.2/supabase.js", "./vendor/leaflet-1.9.4/leaflet.js", "./vendor/leaflet-1.9.4/leaflet.css",
   "./vendor/leaflet-1.9.4/images/marker-icon.png", "./vendor/leaflet-1.9.4/images/marker-icon-2x.png", "./vendor/leaflet-1.9.4/images/marker-shadow.png"];
